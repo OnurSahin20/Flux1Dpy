@@ -7,29 +7,9 @@ class SoilModels:
         self.method = method
         self.par = parameters
         self.hs,self.hr,self.h0 = -1, -1500,-0.63 * np.power(10,7)
-        if self.method == "VGM":
-            req_params = ["a","n","tr","ths","ks"]
-            if set(self.par.keys()) != set(req_params):
-                raise ValueError(f"Model {self.method} parameters should be {req_params} but given as {self.par.keys()}")
-            sorted_dict = {k: self.par[k] for k in req_params}
-            self.a,self.n,self.tr,self.ths,self.ks = sorted_dict.values()
-            self.m = 1 - 1 / self.n
-            self.L = np.array([0.5] * self.m.shape[0])
-            if not (self.a.size == self.n.size == self.ths.size,self.tr.size==self.ks.size):
-                raise ValueError(f"sizes do not match of the parameters!")
+  
 
-            
-
-        elif self.method == "FXW" or self.method == "FXW-M1":
-            req_params = ["a","n","m","ths","ks"]
-            if set(self.par.keys()) != set(req_params):
-                raise ValueError(f"Model {self.method} parameters should be {req_params} but given as {self.par.keys()}")
-            if not (self.a.size == self.n.size == self.ths.size,self.m.size==self.ks.size):
-                raise ValueError(f"sizes do not match of the parameters!")
-            sorted_dict = {k: self.par[k] for k in req_params}
-            self.a,self.n,self.m,self.ths,self.ks = self.par.values()
-        else:
-            raise ValueError("Models VGM, FXW, FXW-M1 are supported!")
+      
 
         self.N = self.ks.shape[0]
 
@@ -72,11 +52,3 @@ class SoilModels:
         
         return k
     
-
-if __name__ == "__main__":
-    soil_properties = {"a": np.array([-0.33 / 100] * 100), "tr": np.array([0.08] * 100), "ths": np.array([0.45] * 100),
-                   "ks": np.array([120 * 100 / 1440] * 100), "n": np.array([3.0]*100)}  # soil properties of Genuchten-VGM model
-    
-    soil_model = SoilModels("VGM",soil_properties)
-    print(soil_model.calculate_conductivity(np.linspace(0,-1000,100)))
- 
