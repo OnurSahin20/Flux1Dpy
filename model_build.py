@@ -1,29 +1,11 @@
-import os
 import numpy as np
 
-"""
-Definition of the arguments in Infiltration Model
-length unit is always cm.
-time unit can be "hour" or "day".
-discrete:dict is the number of layers and length of the layers. Direction is positive upward. [0] index is bottom Example: 
-discretize = {"layers": [50, 50], "dz": 1 cm} 50 cm each two layer and dz cell size 1 cm total n = 100 cell
-hydraulic_model:str currently supports VGM (Van-Genuchten), FXW and FXW-M1.
-soil_data = {"soil_prop:[p1, p2, p3, ... pl]"} hydraulic properties of the soil model. Example;
-soil_properties = {"alpha (1/cm)": [0.075, 0.019],
-                   "tr": [0.065, 0.095], "ths": [0.41, 0.41], "Ks (cm/min)": [106.1 / 1440, 6.24 / 1440],
-                   "n": [1.89, 1.31], "m": [1-1/1.89,1-1/1.31], "L": [0.5, 0.5]}
-flux is net infiltration or exfiltration rate from top of the soil. (precipitation - evaporation). It should be negative
-if precipitation bigger than evaporation because direction is positive upward.
-initial:list is the initial condition of hydraulic pressure len should be int(z/dz) example:
-n = int(z/dz), initial = [-100] * n
-pond_max:float is the maximum allowable ponding as reservoir on the top of the surface. If it is zero no ponding
-and extra water becomes runoff
-"""
 
 class InfiltrationModel:
-    def __init__(self, discrete: dict[str:np.ndarray, str:float],
+    def __init__(self, sim_time: int, discrete: dict[str:np.ndarray, str:float],
                  hydraulic_model: str,
-                 soil_data: dict[str, list], flux: np.ndarray,sim_time: int, ) -> None:
+                 soil_data: dict[str, list], flux: np.ndarray,
+                 ponding=0,plant_function="",root_params={},root_distribution="",root_depth = 0,transpiration=np.array([])) -> None:
                 
  
         self.sim_time = sim_time
@@ -44,11 +26,12 @@ class InfiltrationModel:
             raise ValueError("Models VGM, FXW, FXW-M1 are supported!")
 
     
-        self.soil_data_dict = soil_data
-        self.time_series = flux
-      
+        self.soil_data_dict,self.time_series,self.ponding,self.plant_func  = soil_data,flux,ponding,plant_function
+        self.root_params,self.root_dist,self.transpiration = root_params,root_distribution,transpiration
+        self.rzl = root_depth
+
     def discretize_soil_colum_1d(self):
-        Z,N,dz_min = sum(self.discrete["layers"]),self.discrete["num_nodes"],self.discrete["dz_min"]
+        Z,N = sum(self.discrete["layers"]),self.discrete["num_nodes"]
         
         if self.discrete["uniform"]:
             return np.linspace(0,Z,N+1),np.array([Z/N] * (N+1))
@@ -74,3 +57,22 @@ class InfiltrationModel:
         soil_params = {param: self.create_vertical_profile(np.array(self.soil_data_dict[param])) for param in keys}
         return soil_params
 
+
+    def create_root_distribution(self) -> np.ndarray:
+        n = self.lay.shape[0]
+        bx = np.zeros(n)
+        if self.root_dist == "normalized":
+            z = 0
+            for i in range(n):
+                if z < self.z - self.rzl:
+                    bx[i] = 0
+                elif z > self.z - 0.2 * self.rzl:
+                    bx[i] = 1.667 / (self.rzl / self.dz[i])
+                else:
+                    bx[i] = 2.0833 / (self.rzl / self.dz[i]) * (1 - (self.z - z) / self.rzl)
+                z += self.dz[i]
+        elif self.root_dist == "equally":
+            b = 1 / int(self.rzl / self.dz[0])
+            bx[n - int(self.rzl / self.dz[0]):] = b
+        
+        return bx
