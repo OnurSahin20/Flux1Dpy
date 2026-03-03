@@ -1,16 +1,16 @@
 import numpy as np
 from model_build import InfiltrationModel
-
-
+from solver import get_moisture
+from solver import get_conduct
 #input parameters for the model!
 
 """
 Definition of the arguments in Infiltration Model
 length unit is always cm.
-time unit can be "hour" or "day".
+time unit is minute!
 discrete:dict is the number of layers and length of the layers. Direction is positive upward. [0] index is bottom Example: 
 discretize = {"layers": [50, 50], "dz": 1 cm} 50 cm each two layer and dz cell size 1 cm total n = 100 cell
-hydraulic_model:str currently supports VGM (Van-Genuchten), FXW and FXW-M1.
+hydraulic_model:str currently supports BC (Brooks and Corey) and VGM (Van-Genuchten), FXW and FXW-M1.
 soil_data = {"soil_prop:[p1, p2, p3, ... pl]"} hydraulic properties of the soil model. Example;
 soil_properties = {"alpha (1/cm)": [0.075, 0.019],
                    "tr": [0.065, 0.095], "ths": [0.41, 0.41], "Ks (cm/min)": [106.1 / 1440, 6.24 / 1440],
@@ -18,8 +18,6 @@ soil_properties = {"alpha (1/cm)": [0.075, 0.019],
 flux is net infiltration or exfiltration rate from top of the soil. (precipitation - evaporation). It should be negative
 if precipitation bigger than evaporation because direction is positive upward.
 
-"""
-"""
 rwu_method - Currently S-Shape and Feddes methods are used in rwu. Parameters are the same as defined in the HYDRUS.
 rwu_response_paremeters:
 for S-Shape there is two input; P50 pressure head corresponding Root water uptake is reduced by 50%
@@ -62,3 +60,7 @@ transpiration = np.array([0] * flux.shape[0]) # if root wateruptake is active tr
 # flux is net P - Bare evaporation
 model = InfiltrationModel(sim_time,discretize,"VGM",soil_properties,flux,ponding=0,
                           plant_function=plant_function,root_params=feddes_params,root_distribution=root_distribution,root_depth = root_depth, transpiration=transpiration)
+
+x = model.get_soil_properties()
+print('ks',x['ks'][0])
+print(get_moisture("VGM",5,-100,x))

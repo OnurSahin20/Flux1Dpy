@@ -1,5 +1,7 @@
 import numpy as np
-
+from numba.typed import Dict
+from numba import types
+from solver import get_moisture
 
 class InfiltrationModel:
     def __init__(self, sim_time: int, discrete: dict[str:np.ndarray, str:float],
@@ -51,10 +53,16 @@ class InfiltrationModel:
                     count = 0.0
         return vertic_prof
 
-    def get_soil_properties(self) -> dict:
-        """method gathers vertical features of layers for different soil properties inside of dictionary"""
-        keys = self.soil_data_dict.keys()
-        soil_params = {param: self.create_vertical_profile(np.array(self.soil_data_dict[param])) for param in keys}
+    def get_soil_properties(self) -> Dict:
+        """Method gathers vertical features of layers into a Numba-typed dictionary."""
+        key_type = types.unicode_type
+        value_type = types.float64[:] 
+        
+        soil_params = Dict.empty(key_type, value_type)
+        for param in self.soil_data_dict.keys():
+            profile = self.create_vertical_profile(np.array(self.soil_data_dict[param]))
+            soil_params[param] = np.ascontiguousarray(profile, dtype=np.float64)
+            
         return soil_params
 
 
@@ -76,3 +84,4 @@ class InfiltrationModel:
             bx[n - int(self.rzl / self.dz[0]):] = b
         
         return bx
+    
