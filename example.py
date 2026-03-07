@@ -1,7 +1,6 @@
 import numpy as np
 from model_build import InfiltrationModel
-from solver import get_moisture
-from solver import get_conduct
+
 #input parameters for the model!
 
 """
@@ -49,8 +48,8 @@ root_depth = 50 # cm surface to bottom
 #root_distribution = "normalized" # second option is "equally"
 root_distribution = "equally" # second option is "equally"
 plant_function = "feddes" #second option s-shape
-feddes_params = response_feddes = {"P0": -10, "P0pt": -25, "P2H": -300, "P2L": -1000,
-                   "P3": -8000,"r2H":0.5 / 1440,"r2L":0.1/1440 }  # grass feddes response parameters forcm/days to cm/min conversion of last two parameter
+feddes_params = response_feddes = {"p0": -10, "p0opt": -25, "p2h": -300, "p2l": -1000,
+                   "p3": -8000,"r2h":0.5 / 1440,"r2l":0.1/1440 }  # grass feddes response parameters forcm/days to cm/min conversion of last two parameter
 #feddes_params = response_feddes = {"P0": -15, "P0pt": -30, "P2H": -325, "P2L": -600,
  #                  "P3": -8000,"r2H":0.5 / 1440,"r2L":0.1/1440 }  
 
@@ -61,6 +60,7 @@ transpiration = np.array([0] * flux.shape[0]) # if root wateruptake is active tr
 model = InfiltrationModel(sim_time,discretize,"VGM",soil_properties,flux,ponding=0,
                           plant_function=plant_function,root_params=feddes_params,root_distribution=root_distribution,root_depth = root_depth, transpiration=transpiration)
 
-x = model.get_soil_properties()
-print('ks',x['ks'][0])
-print(get_moisture("VGM",5,-100,x))
+
+#params = model.get_soil_properties()
+
+#a,n,m,L,tr,ths,ks = soil_properties['a'],soil_properties['n'],soil_properties['m'],soil_properties['L'],soil_properties['tr'],soil_properties['ths'],soil_properties['ks']
