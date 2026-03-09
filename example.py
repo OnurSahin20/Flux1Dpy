@@ -1,6 +1,6 @@
 import numpy as np
 from model_build import InfiltrationModel
-
+from soil_model import SoilModels
 #input parameters for the model!
 
 """
@@ -31,36 +31,40 @@ specific root distribution change self.root_distribution parameter
 
 
 # soil properties of Genuchten-VGM model
-soil_properties = {"a": [2.8 / 100, 1.04 / 100, 2.8 / 100], "tr": [0.029, 0.106, 0.029],
+soil_props = {"a": [2.8 / 100, 1.04 / 100, 2.8 / 100], "tr": [0.029, 0.106, 0.029],
                    "ths": [0.366, 0.469, 0.366], "ks": [5.41 * 100 / 1440, 0.13 * 100 / 1140, 5.41 * 100 / 1440],
                    "n": [2.239, 1.395, 2.239], "m": [1 - 1 / 2.239, 1 - 1 / 1.395, 1 - 1 / 2.239], "L": [0.5, 0.5, 0.5]}
 
 # soil properties of Genuchten-VGM model
-ponding = 0 # > 0 activate the ponding at the top!
+pond_max= 2.5 # > 0 activate the ponding at the top!
 
 
-discretize = {"layers": [60, 60, 60], "num_nodes":180, "uniform":True,"dz_min":0.5}
+discretize = {"layers": [60, 60, 60], "num_nodes":180, "uniform":True,"dz":1}
 flux = np.array(
     [0.0, 0.0, -0.01, -0.006, -0.008, -0.005, -0.001, -0.003, -0.006, -0.012, -0.012, 0.001, 0.0005, 0.001, 0.0015,
-     0.0005, 0.001, 0.001, -0.005, 0.0005, 0.0006]) * 100 / 1440  # unit was converted to centimeter / minute
+     0.0005, 0.001, 0.001, -0.005, 0.0005, 0.0006],dtype=np.float64) * 100 / 1440  # unit was converted to centimeter / minute
 
 root_depth = 50 # cm surface to bottom 
 #root_distribution = "normalized" # second option is "equally"
-root_distribution = "equally" # second option is "equally"
-plant_function = "feddes" #second option s-shape
+root_dist = "equally" # second option is "equally"
+plant_func = "feddes" #second option s-shape
 feddes_params = response_feddes = {"p0": -10, "p0opt": -25, "p2h": -300, "p2l": -1000,
                    "p3": -8000,"r2h":0.5 / 1440,"r2l":0.1/1440 }  # grass feddes response parameters forcm/days to cm/min conversion of last two parameter
 #feddes_params = response_feddes = {"P0": -15, "P0pt": -30, "P2H": -325, "P2L": -600,
  #                  "P3": -8000,"r2H":0.5 / 1440,"r2L":0.1/1440 }  
 
-#response_sshape = {"P50":-800,"P0":3} two parameters are required for sshape
+#response_sshape = {"p50":-800,"p0":3} two parameters are required for sshape
 sim_time = 1500 #minute
-transpiration = np.array([0] * flux.shape[0]) # if root wateruptake is active transpiration needs to be given 
+temp_time  = 60 # temporal resolution of meteorological data 60 hourly 180 3 hourly or 1440 for daily 
+transpiration = np.array([0.0] * flux.shape[0],dtype=np.float64) # if root wateruptake is active transpiration needs to be given 
 # flux is net P - Bare evaporation
-model = InfiltrationModel(sim_time,discretize,"VGM",soil_properties,flux,ponding=0,
-                          plant_function=plant_function,root_params=feddes_params,root_distribution=root_distribution,root_depth = root_depth, transpiration=transpiration)
+hyd_model = 'VGM'
+model = InfiltrationModel(sim_time,temp_time,discretize,hyd_model,soil_props,flux,
+                          transpiration,plant_func,feddes_params,root_dist,root_depth,pond_max)
 
-
+params = model.get_soil_properties()
+h = np.array([-10] * params['ks'].shape[0])
+soil_class = SoilModels(1,params)
 #params = model.get_soil_properties()
 
 #a,n,m,L,tr,ths,ks = soil_properties['a'],soil_properties['n'],soil_properties['m'],soil_properties['L'],soil_properties['tr'],soil_properties['ths'],soil_properties['ks']

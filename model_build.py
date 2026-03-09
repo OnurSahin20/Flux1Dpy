@@ -3,14 +3,15 @@ from numba.typed import Dict
 from numba import types
 
 class InfiltrationModel:
-    def __init__(self, sim_time: int, discrete: dict[str:np.ndarray, str:float],
-                 hydraulic_model: str,
-                 soil_data: dict[str, list], flux: np.ndarray,
-                 ponding=0,plant_function="",root_params={},root_distribution="",root_depth = 0,transpiration=np.array([])) -> None:
-                
- 
-        self.sim_time = sim_time
+    def __init__(self, sim_time: int, temp_time:int,discrete: dict[str:np.ndarray, str:float],
+                 hydraulic_model: str,soil_data: dict[str, list], flux: np.ndarray,transpiration:np.ndarray,
+                 plant_function="",root_params={},root_distribution="",
+                 root_depth = 0,ponding_max=0) -> None:
+        
+        self.sim_time, self.temp_time = sim_time,temp_time
+        self.hydro_model = hydraulic_model
         self.discrete = discrete
+        self.flux = flux
         self.z = sum(self.discrete["layers"])
         self.lay,self.dz = self.discretize_soil_colum_1d()
         if hydraulic_model== "VGM":
@@ -27,7 +28,7 @@ class InfiltrationModel:
             raise ValueError("Models VGM, FXW, FXW-M1 are supported!")
 
     
-        self.soil_data_dict,self.time_series,self.ponding,self.plant_func  = soil_data,flux,ponding,plant_function
+        self.soil_data_dict,self.time_series,self.ponding,self.plant_func  = soil_data,flux,ponding_max,plant_function
         self.root_params,self.root_dist,self.transpiration = root_params,root_distribution,transpiration
         self.rzl = root_depth
 
@@ -54,27 +55,23 @@ class InfiltrationModel:
 
     def get_soil_properties(self) -> Dict: #numba type dict 
         """Method gathers vertical features of layers into a Numba-typed dictionary."""
-        key_type,value_type = types.unicode_type,types.float64[:] 
-      
-        
+        key_type,value_type = types.unicode_type,types.float64[::1] 
         soil_params = Dict.empty(key_type, value_type)
         for param in self.soil_data_dict.keys():
             profile = self.create_vertical_profile(np.array(self.soil_data_dict[param]))
             soil_params[param] = np.ascontiguousarray(profile, dtype=np.float64)
-            
         return soil_params
 
     def get_root_params(self) ->Dict:
         key_type,value_type = types.unicode_type,types.float64 
         params = Dict.empty(key_type, value_type)
         for param in self.root_params.keys():
-            params[param] = self.root_params[param]
-            
+            params[param] = self.root_params[param] 
         return params
           
     def create_root_distribution(self) -> np.ndarray:
         n = self.lay.shape[0]
-        bx = np.zeros(n)
+        bx = np.zeros(n,dtype=np.float64)
         if self.root_dist == "normalized":
             z = 0
             for i in range(n):
@@ -90,4 +87,8 @@ class InfiltrationModel:
             bx[n - int(self.rzl / self.dz[0]):] = b
         
         return bx
-    
+
+
+
+        
+
