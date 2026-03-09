@@ -1,7 +1,6 @@
 
 from numba.experimental import jitclass
 from numba import float64,int32
-from numba.experimental import jitclass
 import numpy as np 
 from soil_model import SoilModels
 from source_sink import RootWaterUptake
@@ -32,7 +31,7 @@ def solve_thomas(A,B,C,F):
 
 
 @jitclass(spec)
-class TriDiagonal:
+class CreateTriDiagonal:
     def __init__(self,soil_model,dz):
         self.soil_model = soil_model
         self.N = self.soil_model.conduct.shape[0]
@@ -48,14 +47,14 @@ class TriDiagonal:
         self.root_model.calculate_sink_source(h2,tp)
         sink = self.root_model.sink
         self.B[0] =1; self.C[0] = 0; self.F[0] = 0;# bottom boundary condition. later ! have to implemented no flux boundary. 
-        if (h2[n-1]<self.ha): # lower atmospheric boundary condition if lower than this switch to dirichlet boundary
+        if (h2[n-1]<self.ha) and (flux>=0): # lower atmospheric boundary condition if lower than this switch to dirichlet boundary
             self.B[n-1] =1; self.A[n-1] = 0; self.F[n-1] = 0
             h2[n-1] = self.ha
-        
-        if pond > 0: #ponding boundary again switch to dirichlet boundary if pond > 0 solver has to check 0 < pond <= pond_max
+            # if flux < 0 it turns back to neumann type because of rainfall!
+        if (pond > 0) and (flux< 0): #ponding boundary again switch to dirichlet boundary if pond > 0 solver has to check 0 < pond <= pond_max
             self.B[n-1] =1; self.A[n-1] = 0; self.F[n-1] = 0
-            h2[n-1] = pond
-      
+            h2[n-1] = pond # stil raining and it can not hold more water. pond always <= pond_max
+        
         else:
             k11 = (k[n-1] + k[n-2]) / 2 # averaging it could geometric!
             self.A[n-2] = -k11 / dz2
