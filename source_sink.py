@@ -15,7 +15,7 @@ spec = {
 
 
 @jitclass(spec)
-class SoilModels:
+class RootWaterUptake:
     def __init__(self,method,pars):
         self.method = method
         self.pars = pars
