@@ -11,6 +11,8 @@ spec = {
     'theta1': float64[:],  'theta2': float64[:],  'conduct': float64[:],  'capacity': float64[:]}
 
 
+
+    
 @jitclass(spec)
 class SoilModels:
     def __init__(self,method,pars):
@@ -116,3 +118,24 @@ class SoilModels:
             self.theta2[i] = self.soil_moisture(h2[i],i)
             self.conduct[i] = self.hydraulic_conductivity(h2[i],i)
             self.capacity[i] = self.calculate_capacity(h2[i],i)
+    
+    def get_error(self,h1,h2):
+        smax = 0
+        for i in range(0,h1.shape[0]):
+            h0 = abs(self.soil_moisture(h1[i],i)-self.soil_moisture(h2[i],i))
+            if (h0>smax):
+                smax = h0
+        return smax 
+    
+    def only_moisture(self,h):
+        n= h.shape[0]
+        out = np.zeros(n)
+        for i in range(0,n):
+            out[i] = self.soil_moisture(h[i],i)
+        return out
+    
+    def calculate_pond(self,dz,h,dt,pond,flux):
+        n = h.shape[0]
+        k = (self.hydraulic_conductivity(h[n-1],n-1) + self.hydraulic_conductivity(h[n-2],n-2)) / 2 
+        qdarcy=  - k * ((h[n-1]-h[n-2])/dz + 1)
+        return pond + (-flux + qdarcy) * dt

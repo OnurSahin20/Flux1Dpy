@@ -39,7 +39,7 @@ class CreateTriDiagonal:
         self.ha,self.hs = -10000, 0
         self.A,self.B,self.C,self.F = np.zeros(self.N-1),np.zeros(self.N),np.zeros(self.N-1),np.zeros(self.N)
     
-    def create_TriDiagonal(self,dt,h1,h2,tp,pond,flux):
+    def get_TriDiagonal(self,dt,h1,h2,tp,pond,flux):
         dz2 = np.power(self.dz, 2) 
         self.soil_model.calculate_props(h1,h2)
         s1,s2,k,cap = self.soil_model.theta1,self.soil_model.theta2,self.soil_molde.conduct,self.soil_model.capacity
