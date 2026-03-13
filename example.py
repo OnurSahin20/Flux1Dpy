@@ -23,18 +23,22 @@ rwu_distribution: str is the root distribution bx. "normalized" and "equally" di
 
 
 # soil properties of Genuchten-VGM model
-soil_props = {"a": [2.8 / 100, 1.04 / 100, 2.8 / 100], "tr": [0.029, 0.106, 0.029],
-                   "ths": [0.366, 0.469, 0.366], "ks": [5.41 * 100 / 1440, 0.13 * 100 / 1140, 5.41 * 100 / 1440],
-                   "n": [2.239, 1.395, 2.239], "m": [1 - 1 / 2.239, 1 - 1 / 1.395, 1 - 1 / 2.239], "L": [0.5, 0.5, 0.5]}
+soil_props = {"a": [0.075, 0.019],
+                   "tr": [0.065, 0.095],
+                   "ths": [0.41, 0.41],
+                   "ks": [106.1 / 1440, 6.24 / 1440],
+                   "n": [1.89, 1.31],
+                   'm': [1 - 1/1.89,1-1/1.31],
+                   'L':[0.5,0.5]}
 
 pond_max= 2.5 # > 0 activate the ponding at the top!
 
 
-discretize = {"layers": [60, 60, 60], "num_nodes":180, "uniform":True,"dz":0.5}
+discretize = {"layers": [50, 50], "dz": 1,'uniform':True,'num_nodes':100}
+#flux = np.array(
+    #[-6, -6, -10,  0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,1]) / 1440 # unit was converted to centimeter / minute
 flux = np.array(
-    [0.0, 0.0, -3.5, -1, -1, -0.05, -0.001, -0.003, -0.006, -0.012, -0.012, 0.001, 0.0005, 0.001, 0.0015,
-     0.0005, 0.001, 0.001, -0.005, 0.0005, 0.0006],dtype=np.float64) * 100 / 1440  # unit was converted to centimeter / minute
-
+    [-6, -6, -10, 0.0,0.0,0.5,0.5]) / 1440 # unit was converted to centimeter / minute
 root_depth = 100 # cm surface to bottom 
 #root_distribution = "normalized" # second option is "equally"
 root_dist = "normalized" # second option is "equally"
@@ -45,8 +49,9 @@ feddes_params = response_feddes = {"p0": -10, "p0opt": -25, "p2h": -300, "p2l": 
  #                  "P3": -8000,"r2H":0.5 / 1440,"r2L":0.1/1440 }  
 tp_mid = 0.3 / 1440
 #response_sshape = {"p50":-800,"p0":3} two parameters are required for sshape
-sim_time = 1500 #minute
-temp_time  = 60 # temporal resolution of meteorological data 60 hourly 180 3 hourly or 1440 for daily 
+
+temp_time  = 1440.0 # temporal resolution of meteorological data 60 hourly 180 3 hourly or 1440 for daily 
+sim_time = temp_time * flux.shape[0]#minute
 transpiration = np.array([0.0] * flux.shape[0],dtype=np.float64) # if root wateruptake is active transpiration needs to be given 
 # flux is net P - Bare evaporation
 hyd_model = 'VGM'
@@ -60,6 +65,6 @@ bx = model.create_root_distribution()
 root_model = RootWaterUptake(1,root_params,bx)
 diagonal_model= CreateTriDiagonal(soil_model,root_model,1)
 hini = np.ones(bx.shape) * -100
-numeric_solver = NumericSolver(soil_model,diagonal_model,root_model,1500.0,60.0,1.0,hini,flux,transpiration,2.5)
+numeric_solver = NumericSolver(soil_model,diagonal_model,root_model,sim_time,temp_time,1.0,hini,flux,transpiration,3)
 
 print(numeric_solver.RunSolver())

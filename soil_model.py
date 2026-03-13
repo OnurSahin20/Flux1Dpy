@@ -138,4 +138,5 @@ class SoilModels:
         n = h.shape[0]
         k = (self.hydraulic_conductivity(h[n-1],n-1) + self.hydraulic_conductivity(h[n-2],n-2)) / 2 
         qdarcy=  - k * ((h[n-1]-h[n-2])/dz + 1)
-        return pond + (-flux + qdarcy) * dt
+        new_pond = pond + (-flux + qdarcy) * dt
+        return new_pond 

@@ -14,6 +14,8 @@ class InfiltrationModel:
         self.flux = flux
         self.z = sum(self.discrete["layers"])
         self.lay,self.dz = self.discretize_soil_colum_1d()
+        self.check  = int(self.sim_time / self.temp_time)
+       
         if hydraulic_model== "VGM":
             req_params = ["a","n","m","tr","ths","ks","L"]
             if set(sorted(soil_data.keys())) != set(req_params):
@@ -31,6 +33,8 @@ class InfiltrationModel:
         self.soil_data_dict,self.time_series,self.ponding,self.plant_func  = soil_data,flux,ponding_max,plant_function
         self.root_params,self.root_dist,self.transpiration = root_params,root_distribution,transpiration
         self.rzl = root_depth
+        if (self.check != self.flux.shape[0]) or (self.check != self.transpiration.shape[0]):
+            raise ValueError('Simulation time and size of vectors have to consistent!')
 
     def discretize_soil_colum_1d(self):
         Z,N = sum(self.discrete["layers"]),self.discrete["num_nodes"]

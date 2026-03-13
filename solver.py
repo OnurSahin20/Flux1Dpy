@@ -53,13 +53,11 @@ class NumericSolver:
         n = self.hnew.shape[0] - 1
         self.stat = 1 
         for i in range(0,15,1):
-            self.hnew[0] = self.hnew[1] # free drainage boundary condition will fix after!!!
+            self.hnew[0] = 0 #water table
             hx = self.diagonal_model.get_new(dt,hold,self.hnew,tp,pond,flux)
-            if hx[n] > self.pond_max:
-                print(hx[n])
-                break
             mass_error = self.soil_model.get_error(self.hnew,hx)
-            self.hnew[:] = hx[:]   
+            self.hnew[:] = hx[:] 
+            
             if (mass_error<=eps):
                  self.stat = 0
                  break
@@ -71,37 +69,41 @@ class NumericSolver:
 
     def RunSolver(self):
         r,c = self.flux.shape[0],self.ini_head.shape[0]
-        h_out,sout = np.zeros((r,c)), np.zeros((r,c))  
+        hout,sout = np.zeros((r+1,c)), np.zeros((r+1,c))
+        hout[0,:] = self.ini_head[:]
+        sout[0,:] = self.soil_model.only_moisture(self.ini_head)[:]
         pond = 0.0
         count_time, ind_time= 0.0,0.0
         index = int(0)
         while (count_time<self.sim_time):
             hnew = self.IterateTime(self.ini_head,self.flux[index],self.transp[index],self.dt,pond)
             
-            if index >= self.flux.shape[0]:
-                raise ValueError
             if self.stat != 0:
                 self.dt = self.dt / 2 
-                print('fixing it')
+                 
             else:
+                
                 count_time += self.dt
                 ind_time += self.dt
-                pond = self.soil_model.calculate_pond(self.dz,hnew,self.dt,pond,self.flux[index])
-                pond = 0
+                if self.pond_max > 0:
+                    pond = self.soil_model.calculate_pond(self.dz,hnew,self.dt,pond,self.flux[index])
+            
                 if pond > self.pond_max:
                     pond = self.pond_max
+                
                 self.dt = self.dt_new 
                 self.ini_head[:] = hnew[:]
-                print(self.ini_head[c-1])
-                
 
             if ind_time >= self.sim_temp:
-                h_out[index,:] = hnew[:]
-                sout[index,:] = self.soil_model.only_moisture(hnew)
+                hout[index+1,:] = self.ini_head[:]
+                sout[index+1,:] = self.soil_model.only_moisture(self.ini_head)
                 ind_time = ind_time - self.sim_temp
                 index +=1 
-                
+        
+        print(hout[:,c-1])
+        print(sout[:,c-1])
+        print(hout[-1,:])
+               
 
-            
         #return h_out,sout
         

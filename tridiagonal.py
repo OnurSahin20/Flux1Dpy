@@ -53,13 +53,9 @@ class CreateTriDiagonal:
             self.B[n-1] =1; self.A[n-1] = 0; self.F[n-1] = 0
             h2[n-1] = self.ha
         
-        if (h2[n-1]>self.hs) and (flux<0):
+        if (h2[n-1]>=0):
             self.B[n-1] =1; self.A[n-1] = 0; self.F[n-1] = 0
-            h2[n-1] = self.hs
-            
-        if (pond > 0): #ponding boundary again switch to dirichlet boundary if pond > 0 solver has to check 0 < pond <= pond_max
-            self.B[n-1] =1; self.A[n-1] = 0; self.F[n-1] = 0
-            h2[n-1] = pond # stil raining and it can not hold more water. pond always <= pond_max
+            h2[n-1] = pond
         
         else:
             k11 = (k[n-1] + k[n-2]) / 2 # averaging it could geometric!
