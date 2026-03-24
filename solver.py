@@ -99,11 +99,3 @@ class NumericSolver:
                 sout[index+1,:] = self.soil_model.only_moisture(self.ini_head)
                 ind_time = ind_time - self.sim_temp
                 index +=1 
-        
-        print(hout[:,c-1])
-        print(sout[:,c-1])
-        print(hout[-1,:])
-               
-
-        #return h_out,sout
-        

@@ -1,0 +1,38 @@
+Pcp_File_Version=4
+*** BLOCK A: BASIC INFORMATION ***************************************************
+Created with Pydrus version 0.2.0
+Infiltration of Water into a Single-Layered Soil Profile
+LUnit TUnit MUnit
+cm
+days
+mmol
+lWat  lChem  lTemp  lSink  lRoot  lShort  lWDep  lScreen  AtmInf  lEquil  lInverse  
+t  f  f  f  f  f  f  f  f  t  f
+lSnow  lHP1  lMeteo  lVapor  lActRSU  lFlux  lIrrig  
+f  f  f  f  f  t  f
+NMat NLay CosAlfa 
+1 1 1
+*** BLOCK B: WATER FLOW INFORMATION **********************************************
+MaxIt  TolTh  TolH   (maximum number of iterations and tolerances)
+10   0.001   1
+TopInf  WLayer  KodTop  lInitW  
+f f 1 f 
+BotInf  qGWLF  FreeD  SeepF  KodBot  qDrain  hSeep  
+f f t f -1 f 0 
+ha  hb  
+1e-06 10000.0 
+iModel  iHyst  
+0 0 
+  thr  ths  Alfa    n    Ks   l
+0.078 0.43 0.036 1.56 24.96 0.5
+*** BLOCK C: TIME INFORMATION ****************************************************
+dt dtMin dtMax dMul dMul2 ItMin ItMax MPL 
+0.001 1e-05 5 1.3 0.7 3 7 10 
+tInit tMax 
+0 1 
+lPrint nPrintSteps tPrintInterval lEnter 
+t 1 1 f 
+TPrint(1),TPrint(2),...,TPrint(MPL)
+0.1 0.2 0.30000000000000004 0.4 0.5 0.6000000000000001
+0.7000000000000001 0.8 0.9 1.0
+*** BLOCK END OF INPUT FILE SELECTOR.IN ******************************************

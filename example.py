@@ -1,9 +1,9 @@
 import numpy as np
 from model_build import InfiltrationModel
-from soil_model import SoilModels
-from source_sink import RootWaterUptake
+
+
 #input parameters for the model!
-from tridiagonal import CreateTriDiagonal
+
 from solver import NumericSolver
 """
 Definition of the arguments in Infiltration Model
@@ -34,7 +34,9 @@ soil_props = {"a": [0.075, 0.019],
 pond_max= 2.5 # > 0 activate the ponding at the top!
 
 
-discretize = {"layers": [50, 50], "dz": 1,'uniform':True,'num_nodes':100}
+discretize = {"layers": [50, 50], "dz": 1}
+bound_bot = 'free drainage'
+bound_top,bound_value = 'constant_head',1
 #flux = np.array(
     #[-6, -6, -10,  0, 0, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1,1]) / 1440 # unit was converted to centimeter / minute
 flux = np.array(
@@ -54,17 +56,8 @@ temp_time  = 1440.0 # temporal resolution of meteorological data 60 hourly 180 3
 sim_time = temp_time * flux.shape[0]#minute
 transpiration = np.array([0.0] * flux.shape[0],dtype=np.float64) # if root wateruptake is active transpiration needs to be given 
 # flux is net P - Bare evaporation
-hyd_model = 'VGM'
-model = InfiltrationModel(sim_time,temp_time,discretize,hyd_model,soil_props,flux,
-                          transpiration,plant_func,feddes_params,root_dist,root_depth,pond_max)
+hyd_model = 'BC'
 
-params = model.get_soil_properties()
-soil_model= SoilModels(1,params) # 1 is VGM and params is dictionary.
-root_params  = model.get_root_params()
-bx = model.create_root_distribution()
-root_model = RootWaterUptake(1,root_params,bx)
-diagonal_model= CreateTriDiagonal(soil_model,root_model,1)
-hini = np.ones(bx.shape) * -100
-numeric_solver = NumericSolver(soil_model,diagonal_model,root_model,sim_time,temp_time,1.0,hini,flux,transpiration,3)
-
-print(numeric_solver.RunSolver())
+model = InfiltrationModel(sim_time,temp_time,discretize)
+model.set_soil_model(hyd_model,soil_props)
+print(model.soil_params)

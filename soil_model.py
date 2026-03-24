@@ -3,16 +3,11 @@ from numba import float64,int32
 from numba.experimental import jitclass
 import numpy as np 
 
-
-# 1. Define the spec with unicode_type for the string
 spec = {
     'method': int32,'pars': DictType(unicode_type, float64[:]),'hs': float64, 'h0': float64,'hr': float64,'lamb': float64[:],'hb': float64[:],
     'tr': float64[:],'ths': float64[:],'ks': float64[:],'a': float64[:],'n': float64[:], 'm': float64[:],  'L': float64[:],
     'theta1': float64[:],  'theta2': float64[:],  'conduct': float64[:],  'capacity': float64[:]}
 
-
-
-    
 @jitclass(spec)
 class SoilModels:
     def __init__(self,method,pars):
@@ -89,7 +84,7 @@ class SoilModels:
                 return self.ks[i]
 
     def calculate_capacity(self,h,i): 
-        #The specific moisture capacity anaytical formulation for brooks and corey and genuchten and numerical derivative for FXW and FXW-M1
+        #The specific moisture capacity analytical formulation for brooks and corey and genuchten and numerical derivative for FXW and FXW-M1
         if self.method == 0:
             if h >= self.hb[i]:
                 return 0.0
@@ -136,7 +131,7 @@ class SoilModels:
     
     def calculate_pond(self,dz,h,dt,pond,flux):
         n = h.shape[0]
-        k = (self.hydraulic_conductivity(h[n-1],n-1) + self.hydraulic_conductivity(h[n-2],n-2)) / 2 
+        k = (self.hydraulic_conductivity(h[n-1],n-1) + self.hydraulic_conductivity(h[n-2],n-2)) / 2 # averaged. constant dz
         qdarcy=  - k * ((h[n-1]-h[n-2])/dz + 1)
         new_pond = pond + (-flux + qdarcy) * dt
         return new_pond 
