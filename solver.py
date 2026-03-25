@@ -31,8 +31,6 @@ class NumericSolver:
         self.stat = 1 # controls solver is successful or not flag
         self.dz = dz
         
-    
-
     def control_dt(self,dt,i):
         if (i<=3):
             if dt * 1.3 < self.dt_max:
@@ -77,12 +75,10 @@ class NumericSolver:
         index = int(0)
         while (count_time<self.sim_time):
             hnew = self.IterateTime(self.ini_head,self.flux[index],self.transp[index],self.dt,pond)
-            
             if self.stat != 0:
                 self.dt = self.dt / 2 
                  
             else:
-                
                 count_time += self.dt
                 ind_time += self.dt
                 if self.pond_max > 0:

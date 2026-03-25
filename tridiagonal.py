@@ -35,49 +35,81 @@ class CreateTriDiagonal:
     def __init__(self,soil_model,root_model,dz,top_bound,bot_bound):
         self.soil_model = soil_model
         self.root_model = root_model
-        self.N = self.soil_model.conduct.shape[0]
         self.dz = dz
+        self.dz2 = np.power(self.dz, 2)
         self.ha,self.hs = -100_000, 0
         self.A,self.B,self.C,self.F = np.zeros(self.N-1),np.zeros(self.N),np.zeros(self.N-1),np.zeros(self.N)
+        self.s1,self.s2,self.k,self.cap = np.zeros(self.N),np.zeros(self.N),np.zeros(self.N),np.zeros(self.N)
+        self.head = np.zeros(self.N)
         self.top_bound,self.bot_bound  = top_bound,bot_bound
+        self.n = self.s1.shape[0]
+        self.n_1,self.n_2 = self.n - 1, self.n - 2
     
-    def set_top(self,dt,h2,cap,s1,s2,k,flux_top,head_top,pond,sink):
-        n = h2.shape[0]
-        dz2 = np.power(self.dz, 2)
+    def set_top(self,dt,flux_top,head_top,pond,sink):
+       
+        if self.top_bound == 4: # atmospheric boundary
+            if (self.head[self.n_1] < self.ha) and (flux_top>=0): # lower boundary
+                self.B[self.n_1] =1; self.A[self.n_1] = 0; self.F[self.n_1] = 0
+                self.head[self.n_1] = self.ha
 
-        if (h2[n-1]<self.ha) and (flux_top>=0): 
-            self.B[n-1] =1; self.A[n-1] = 0; self.F[n-1] = 0
-            h2[n-1] = self.ha
-        # lower atmospheric boundary condition if lower than this switch to dirichlet boundary
+            if (head_top[self.n_1]>=0): # upper boundary handling surface layer if ponding_max > 0 also
+                self.B[self.n_1] =1; self.A[self.n_1] = 0; self.F[self.n_1] = 0
+                self.head[self.n_1] = pond
 
-        if (h2[n-1]>=0):
-            self.B[n-1] =1; self.A[n-1] = 0; self.F[n-1] = 0
-            h2[n-1] = pond
-        # upper boundary condition if higher than pond_max switch to dirichlet handles surface layer dynamically!
         else:
-            if (self.top_bound  == 0) or (self.top_bound == 2):
-                self.B[n-1] =1; self.A[n-1] = 0; self.F[n-1] = 0
+            if (self.top_bound  == 0) or (self.top_bound == 2): # constant or variable head boundary (main function should change time series of heads)
+                self.B[self.n_1] =1; self.A[self.n_1] = 0; self.F[self.n_1] = 0
+                self.head[self.n_1] = head_top
+            else: # constant or variable flux boundary condition!
+                k11 = (self.k[self.n_1] + self.k[self.n_2]) / 2
+                self.A[self.n_2] = -k11 / self.dz2
+                self.B[self.n_1] =  self.cap[self.n_1] / dt + k11 / self.dz2
+                self.F[self.n_1] = self.head[self.n_2] * k11 / self.dz2 - self.head[self.n_1] *  k11 / self.dz2 - k11/self.dz+ (
+                    self.s1[self.n_1]-self.s2[self.n_1]) / dt - flux_top / self.dz - sink[self.n_1]
+    
+    def set_bot(self,dt,flux_bot,head_bot,sink):
+        if (self.bot_bound == 0) or (self.bot_bound == 2): #constant head
+            self.B[0] =1; self.C[0] = 0; self.F[0] = 0
+            self.head[0] = head_bot
+        elif (self.bot_bound == 1) or (self.bot_bound == 3): # neumann type flux condition 
+            k01 = (self.k[1] + self.k[0]) / 2
+            self.C[0] = -k01 / self.dz2
+            self.B[0] =  self.cap[0] / dt + k01 / self.dz2
+            self.F[0] = self.head[1] * k01 / self.dz2 - self.head[0] * k01 / self.dz2 + k01 / self.dz + (
+                    self.s1[0] - self.s2[0]) / dt + flux_bot / self.dz - sink[0]
+    
+        elif (self.bot_bound == 4): # free drainage
+            self.B[0] = 1.0; self.C[0] = -1.0; self.F[0] = self.head[1] - self.head[0]
 
-            k11 = (k[n-1] + k[n-2]) / 2 # averaging it could geometric!
-            self.A[n-2] = -k11 / dz2
-            self.B[n-1] =  cap[self.N-1] / dt + k11 / np.pow(self.dz, 2)
-            self.F[n-1] = h2[n-2] * k11 / dz2 - h2[n-1] *  k11 / dz2 - k11/self.dz+ (s1[n-1]-s2[n-1]) / dt - flux_top / self.dz - sink[n-1]
+        elif (self.bot_bound ==5): # seepage face
+            if self.head[0] >= 0.0:
+                self.B[0] = 1.0;  self.C[0] = 0.0
+                self.F[0] = -self.head[0] # setting delta_h = -h_old ensures h_new becomes 0.0.
+            else:
+                k01 = (self.k[0] + self.k[1]) / 2.0
+                self.C[0] = -k01 / self.dz2
+                self.B[0] = self.cap[0] / dt + k01 / self.dz2
+                self.F[0] = (self.head[1] * k01 / self.dz2 - self.head[0] * k01 / self.dz2 + k01 / self.dz 
+                            + (self.s1[0] - self.s2[0]) / dt - sink[0]) # it has the flux term as zero
         
-        
-    def get_new(self,dt,h1,h2,tp,pond,flux):
+    def get_new(self,dt,h1,h2,tp,pond,head_top,head_bot,flux_top,flux_bot):
+        self.head[:] = h2[:]
+        self.root_model.calculate_sink_source(self.head,tp)
+        sink = self.root_model.sink  
         dz2 = np.power(self.dz, 2) 
-        self.soil_model.calculate_props(h1,h2)
-        s1,s2,k,cap = self.soil_model.theta1,self.soil_model.theta2,self.soil_model.conduct,self.soil_model.capacity
-        n = s1.shape[0]
-        self.root_model.calculate_sink_source(h2,tp)
-        sink = self.root_model.sink        
-        for i in range(1,n-1):
-            k1 = (k[i] + k[i - 1]) / 2
-            k2 = (k[i] + k[i + 1]) / 2
-            self.A[i-1] = -k1 / dz2
-            self.B[i] = ((k1 + k2) / dz2 + cap[i] / dt)
-            self.C[i] = -k2 / dz2
-            self.F[i] = (s1[i] - s2[i]) / dt + k2 * (h2[i + 1] - h2[i]) / dz2 - k1 * (h2[i] - h2[i - 1]) / dz2+ (k2 - k1) / self.dz - sink[i]
+        self.set_top(dt,flux_top,head_top,pond,sink)
+        self.set_bot(dt,flux_bot,head_bot,sink)
+        self.soil_model.calculate_props(h1,self.head)
+        self.s1,self.s2,self.k,self.cap = self.soil_model.theta1,self.soil_model.theta2,self.soil_model.conduct,self.soil_model.capacity
         
-        return solve_thomas(self.A,self.B,self.C,self.F) + h2 
+        for i in range(1,self.n-1):
+            k1 = (self.k[i] + self.k[i - 1]) / 2
+            k2 = (self.k[i] + self.k[i + 1]) / 2
+            self.A[i-1] = -k1 / dz2
+            self.B[i] = ((k1 + k2) / dz2 + self.cap[i] / dt)
+            self.C[i] = -k2 / dz2
+            self.F[i] = (self.s1[i] - self.s2[i]) / dt + k2 * (self.head[i + 1] - self.head[i]) / dz2 - k1 * (
+                        self.head[i] - self.head[i - 1]) / dz2+ (k2 - k1) / self.dz - sink[i]
+        
+        return solve_thomas(self.A,self.B,self.C,self.F) + self.head
         
