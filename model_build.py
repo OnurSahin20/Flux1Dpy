@@ -3,18 +3,24 @@ from numba.typed import Dict
 from numba import types
 from soil_model import SoilModels
 from source_sink import RootWaterUptake
-from tridiagonal import CreateTriDiagonal
+from tridiagonal_varying_dz import CreateTriDiagonal
 
 class InfiltrationModel:
     def __init__(self, sim_time: int, temp_time:int,discrete: dict[str:np.ndarray, str:float]) -> None:
         self.sim_time, self.temp_time = sim_time,temp_time
         self.discrete = discrete
-        self.z,self.dz = sum(self.discrete["layers"]),self.discrete['dz']
-        self.numba_soil = None 
-        self.numba_root = None
-        self.numba_tridiagonal = None
-        self.numba_solver = None
+        self.z,self.nodes = self.setup_grid()
+        self.numba_soil,self.numba_root, self.numba_tridiagonal, self.numba_solver  = None, None, None, None
 
+    def setup_grid(self):
+        z_list,z = [0.0], 0.0
+        for layer_len, dz in zip(self.discrete["layers"], self.discrete["dz"]):
+            num_cells = int(round(layer_len / dz)) 
+            for _ in range(num_cells):
+                z += dz
+                z_list.append(z)    
+        return np.array(z_list),len(z_list) 
+    
     def set_soil_model(self,hydraulic_model,soil_data) -> None:
         options = {'BC':0,"VGM":1,'FXW':2,'FXW-M1':3} # converting string hydraulic model to integer for numba speed!
         if hydraulic_model== "VGM":
@@ -37,67 +43,62 @@ class InfiltrationModel:
             profile = self.create_vertical_profile(np.array(soil_data[param]))
             self.soil_params[param] = np.ascontiguousarray(profile, dtype=np.float64)
         
-        self.numba_soil_class= SoilModels(options[self.hydro_model],self.soil_params)
+        self.numba_soil= SoilModels(options[self.hydro_model],self.soil_params)
 
     def set_root_model(self,root_model = "",root_params={},
-                       root_distribution="", root_depth = 0,transpiration = np.array([])):
+                       root_distribution="", root_depth = 0):
         options = {'s-shape':0,'feddes':1} # converting string hydraulic model to integer for numba speed!
         self.root_model = root_model
-        self.root_params,self.root_dist,self.transpiration = root_params,root_distribution,transpiration
+        self.root_params,self.root_dist = root_params,root_distribution
         self.rzl = root_depth
         key_type,value_type = types.unicode_type,types.float64 
         self.root_params = Dict.empty(key_type, value_type)
-        for param in self.root_params.keys():
-            self.root_params[param] = self.root_params[param] 
+        for param in root_params.keys():
+            self.root_params[param] = root_params[param] 
         bx = self.create_root_distribution()
-        self.numba_root_class = RootWaterUptake(options[self.root_model],self.root_params,bx)
+        self.numba_root = RootWaterUptake(options[self.root_model],self.root_params,bx)
     
-    def set_boundary_conditions(self,hini,top_bound,bot_bound,flux_top=0,flux_bot=0,ponding_max=0) -> None:
+    def set_boundary_conditions(self,hini,top_bound,bot_bound,flux_top=0,flux_bot=0,ponding_max=0) -> None: # handling here boundary condition
         self.top_opts = {'constant head':0,'constant_flux':1,'variable head':2,'variable flux':3,'atmospheric':4}
         self.bot_opts = {'constant head':0,'constant_flux':1,'variable head':2,'variable flux':3,'free drainage':4,'seepage face':5}
         self.hini = hini
         self.flux_top,self.flux_bot = flux_top,flux_bot # either time series if it is time dependent or one variable for fixed
         self.ponding  = ponding_max # if it is bigger than 0, ponding is occurs in the top boundary!
         self.check  = int(self.sim_time / self.temp_time)
-        self.top_bound,self.bot_bound = self.top_opts[top_bound], self.bot_opts[bot_bound]
         if self.top_bound in [2,3,4]:
             if (self.check != self.flux.shape[0]) or (self.check != self.transpiration.shape[0]):
                 raise ValueError(f'Simulation time and size of vectors should have to consistent for boundary {self.top_bound}')
-        # handling here boundary condition
-        self.numba_tridiagonal  = CreateTriDiagonal(self.numba_soil_class,self.numba_root_class,self.dz)
-
   
-    def create_vertical_profile(self, x: np.ndarray) -> np.ndarray:
-        """function returns vertical soil properties. Direction is upward!!!!"""
-        nodes = int(self.z / self.dz + 1)
-        vertic_prof,c,count = np.zeros(nodes),0,0.0
-        for i in range(vertic_prof.shape[0]):
+        self.numba_tridiagonal  = CreateTriDiagonal(self.numba_soil_class,self.numba_root_class,self.dz,self.top_opts[top_bound],self.bot_opts[bot_bound])
+
+    def create_vertical_profile(self, x: list) -> np.ndarray:
+        vertic_prof = np.zeros(self.nodes)
+        c,count = 0,0.0    
+        for i in range(self.nodes):
             vertic_prof[i] = x[c]
-            if i < nodes:
-                count += self.dz
-                if c < len(x) - 1 and count >= self.discrete["layers"][c]:
+            if i < self.nodes - 1:
+                current_dz = self.discrete["dz"][c]
+                count += current_dz
+                if c < len(x) - 1 and count >= self.discrete["layers"][c] - 1e-9:
                     c += 1
-                    count = 0.0
+                    count = 0.0           
         return vertic_prof
 
-          
     def create_root_distribution(self) -> np.ndarray:
-        n = self.lay.shape[0]
-        bx = np.zeros(n,dtype=np.float64)
+        bx = np.zeros(self.nodes, dtype=np.float64)
         if self.root_dist == "normalized":
             z = 0
-            for i in range(n):
+            for i in range(self.nodes):
                 if z < self.z - self.rzl:
                     bx[i] = 0
                 elif z > self.z - 0.2 * self.rzl:
-                    bx[i] = 1.667 / (self.rzl / self.dz[i])
+                    bx[i] = 1.667 / (self.rzl / self.dz)
                 else:
-                    bx[i] = 2.0833 / (self.rzl / self.dz[i]) * (1 - (self.z - z) / self.rzl)
-                z += self.dz[i]
+                    bx[i] = 2.0833 / (self.rzl / self.dz) * (1 - (self.z - z) / self.rzl)
+                z += self.dz
         elif self.root_dist == "equally":
-            b = 1 / int(self.rzl / self.dz[0])
-            bx[n - int(self.rzl / self.dz[0]):] = b
-        
+            b = 1 / int(self.rzl / self.dz)
+            bx[self.nodes - int(self.rzl / self.dz):] = b
         return bx
 
 

@@ -7,8 +7,8 @@ import numpy as np
 # 1. Define the spec with unicode_type for the string
 spec = {
     'method': int32,'pars': DictType(unicode_type, float64),
-    "p0":float64, 'p0opt':float64, 'p2h':float64, 'p2l':float64, 'p3':float64, 'r2h':float64, 'r2l':float64, #feddes parameters
-    'p50':float64,'p0':float64, # s- shape parameter alpha calculation
+    "p0":float64, 'p0opt':float64, 'p2h':float64, 'p2l':float64, 'p3':float64, 'r2h':float64, 'r2l':float64, #feddes
+    'p50':float64,'p0':float64, # s- shape
     'bx':float64[:],'sink': float64[:]
     }
 
