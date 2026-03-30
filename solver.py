@@ -3,7 +3,7 @@ from numba.experimental import jitclass
 from numba import float64,int32
 import numpy as np 
 from soil_model import SoilModels
-from tridiagonal import CreateTriDiagonal
+from tridiagonal_varying_dz import CreateTriDiagonal
 from source_sink import RootWaterUptake
 
 
@@ -48,14 +48,11 @@ class NumericSolver:
     def IterateTime(self,hold,flux,tp,dt,pond):
         eps,mass_error = 10 ** -4,10 # accuracy and initializing the mass error!
         self.hnew[:] = hold[:]
-        n = self.hnew.shape[0] - 1
         self.stat = 1 
         for i in range(0,15,1):
-            self.hnew[0] = 0 #water table
-            hx = self.diagonal_model.get_new(dt,hold,self.hnew,tp,pond,flux)
+            hx = self.diagonal_model.get_new(dt,hold,self.hnew,tp,pond,0,0,flux,0)
             mass_error = self.soil_model.get_error(self.hnew,hx)
             self.hnew[:] = hx[:] 
-            
             if (mass_error<=eps):
                  self.stat = 0
                  break
@@ -95,3 +92,4 @@ class NumericSolver:
                 sout[index+1,:] = self.soil_model.only_moisture(self.ini_head)
                 ind_time = ind_time - self.sim_temp
                 index +=1 
+        return hout
