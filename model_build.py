@@ -1,4 +1,5 @@
 import numpy as np
+import os 
 from numba.typed import Dict
 from numba import types
 from soil_model import SoilModels
@@ -12,11 +13,13 @@ class InfiltrationModel:
         self.discrete = discrete
         self.z,self.nodes = self.set_grid()
         self.numba_soil,self.numba_root, self.numba_tridia = None, None, None
+        self.check  = int(self.sim_time / self.temp_time) # use later the check the size of the numpy arrays!
 
     def validate_components(self):
         for attr in ['numba_soil', 'numba_root', 'numba_tridia']:
             if getattr(self, attr) is None:
                 raise ValueError(f"{attr} is None")
+            
     def set_grid(self):
         z_list,z = [0.0], 0.0
         for layer_len, dz in zip(self.discrete["layers"], self.discrete["dz"]):
@@ -26,24 +29,17 @@ class InfiltrationModel:
                 z_list.append(z)    
         return np.array(z_list),len(z_list) 
     
-    def set_run_solver(self,ini_head,flux,transp):
-        #if self.top_opts[top_bound] in [2,3,4]:
-            #if (self.check != self.flux.shape[0]) or (self.check != self.transpiration.shape[0]):
-                #raise ValueError(f'Simulation time and size of vectors should have to consistent for boundary {self.top_bound}')
+    def set_run_solver(self,hini,flux_top,flux_bot,head_top,head_bot,trans):
+        if self.top_opts[self.top_bound] in [2,3,4]:
+            if (self.check != flux_top.shape[0]) or (self.check != trans.shape[0]):
+                raise ValueError(f'Simulation time and size of vectors should have to consistent for boundary {self.top_bound}')
   
-        if self.numba_root is None:
-            key_type,value_type = types.unicode_type,types.float64 
-            root_params = Dict.empty(key_type, value_type)
-            root_params['p50':0,'p0':0] # creating dummy root model!
-            bx = np.zeros(self.nodes)
-            self.numba_root = RootWaterUptake(0,self.root_params,bx) # it creates zero sink source all the time!
-        
         self.validate_components()
-        ztop = float(self.z[-1] - self.z[-2])
-        solver = NumericSolver(self.numba_soil,self.numba_tridia,self.numba_root,self.sim_time,self.temp_time,ztop,ini_head,flux,transp,self.ponding)
-        hout= solver.RunSolver()
-        print(hout[:,-1])
-
+       
+        solver = NumericSolver(self.numba_soil,self.numba_tridia,self.numba_root,self.sim_time,self.temp_time,hini,flux_top,flux_bot,
+                               head_top,head_bot,trans)
+        return solver.RunSolver()
+        
     def set_soil_model(self,hydraulic_model,soil_data) -> None:
         options = {'BC':0,"VGM":1,'FXW':2,'FXW-M1':3}
         if hydraulic_model== "VGM":
@@ -81,14 +77,19 @@ class InfiltrationModel:
         bx = self.create_root_distribution()
         self.numba_root = RootWaterUptake(options[self.root_model],self.root_params,bx)
     
-    def set_boundary_conditions(self,hini,top_bound,bot_bound,flux_top=0,flux_bot=0,ponding_max=0) -> None:
+    def set_boundary_conditions(self,hini,top_bound,bot_bound,ponding=0) -> None:
+        self.top_bound,self.bot_bound = top_bound,bot_bound
         self.top_opts = {'constant head':0,'constant flux':1,'variable head':2,'variable flux':3,'atmospheric':4}
         self.bot_opts = {'constant head':0,'constant flux':1,'variable head':2,'variable flux':3,'free drainage':4,'seepage face':5}
         self.hini = hini
-        self.flux_top,self.flux_bot = flux_top,flux_bot # either time series if it is time dependent or one variable for fixed
-        self.ponding  = ponding_max # if it is bigger than 0, ponding is occurs in the top boundary!
-        self.check  = int(self.sim_time / self.temp_time)
-        self.numba_tridia = CreateTriDiagonal(self.numba_soil,self.numba_root,self.z,self.top_opts[top_bound],self.bot_opts[bot_bound])
+        if self.numba_root is None:
+            key_type,value_type = types.unicode_type,types.float64 
+            root_params = Dict.empty(key_type, value_type)
+            root_params['p50'],root_params['p0'] = -800.0,3.0
+            bx = np.zeros(self.nodes)
+            self.numba_root = RootWaterUptake(0,root_params,bx) # it creates zero sink source all the time!
+        self.numba_tridia = CreateTriDiagonal(self.numba_soil,self.numba_root,self.z,self.top_opts[top_bound],self.bot_opts[bot_bound],ponding)
+        self.ponding = ponding
 
     def create_vertical_profile(self, x: list) -> np.ndarray:
         vertic_prof = np.zeros(self.nodes)

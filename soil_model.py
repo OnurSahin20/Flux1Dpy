@@ -114,13 +114,25 @@ class SoilModels:
             self.conduct[i] = self.hydraulic_conductivity(h2[i],i)
             self.capacity[i] = self.calculate_capacity(h2[i],i)
     
-    def get_error(self,h1,h2):
-        smax = 0
-        for i in range(0,h1.shape[0]):
-            h0 = abs(self.soil_moisture(h1[i],i)-self.soil_moisture(h2[i],i))
-            if (h0>smax):
-                smax = h0
-        return smax 
+    def get_errors(self, h_old, h_new):
+        theta_err_max = 0.0
+        head_err_max = 0.0
+        for i in range(h_old.shape[0]):
+            # 1. Calculate absolute moisture difference
+            theta_old = self.soil_moisture(h_old[i], i)
+            theta_new = self.soil_moisture(h_new[i], i)
+            theta_err = abs(theta_old - theta_new)
+            
+            if theta_err > theta_err_max:
+                theta_err_max = theta_err
+                
+            # 2. Calculate absolute head difference
+            head_err = abs(h_old[i] - h_new[i])
+            
+            if head_err > head_err_max:
+                head_err_max = head_err
+                
+        return theta_err_max, head_err_max
     
     def only_moisture(self,h):
         n= h.shape[0]
@@ -129,9 +141,8 @@ class SoilModels:
             out[i] = self.soil_moisture(h[i],i)
         return out
     
-    def calculate_pond(self,dz,h,dt,pond,flux):
+    def calculate_darcy(self,dz,h):
         n = h.shape[0]
         k = (self.hydraulic_conductivity(h[n-1],n-1) + self.hydraulic_conductivity(h[n-2],n-2)) / 2 # averaged. constant dz
         qdarcy=  - k * ((h[n-1]-h[n-2])/dz + 1)
-        new_pond = pond + (-flux + qdarcy) * dt
-        return new_pond 
+        return qdarcy

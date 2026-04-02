@@ -10,46 +10,37 @@ from numba import njit
 soil_model_type = SoilModels.class_type.instance_type
 root_model_type = RootWaterUptake.class_type.instance_type
 spec = {"soil_model":soil_model_type,"root_model":root_model_type,'top_bound':int32,'bot_bound':int32,'z':float64[:],'n':int32,"ha":float64,'hs':float64,
-        "A":float64[:],"B":float64[:],"C":float64[:],"F":float64[:], 'head':float64[:],
+        "A":float64[:],"B":float64[:],"C":float64[:],"F":float64[:], 'head':float64[:], 'pond_max':float64,
         's1':float64[:],'s2':float64[:],'k':float64[:],'cap':float64[:],'n_1':int32,'n_2':int32} # defining the tridiagonals
 
 @jitclass(spec)
 class CreateTriDiagonal:
-    def __init__(self,soil_model,root_model,z,top_bound,bot_bound):
+    def __init__(self,soil_model,root_model,z,top_bound,bot_bound,pond_max):
         self.soil_model = soil_model
         self.root_model = root_model
         self.z = z
         self.n = self.z.shape[0]
-        self.ha,self.hs = -100_000, 0
+        self.ha,self.hs = -50000, 0
+        self.pond_max = pond_max
         self.A,self.B,self.C,self.F = np.zeros(self.n-1),np.zeros(self.n),np.zeros(self.n-1),np.zeros(self.n)
         self.s1,self.s2,self.k,self.cap = np.zeros(self.n),np.zeros(self.n),np.zeros(self.n),np.zeros(self.n)
         self.top_bound,self.bot_bound  = top_bound,bot_bound
         self.n_1,self.n_2 = self.n - 1, self.n - 2
         self.head = np.zeros(self.n)
     
-    def set_top(self, dt, flux_top, head_top, pond, sink):
-        is_dirichlet = False
-        active_head = 0.0
-
+    def set_top(self, dt, flux_top, head_top,sink,atmosp):
         if self.top_bound == 0 or self.top_bound == 2: 
-            is_dirichlet = True
-            active_head = head_top
-
-        elif self.top_bound == 4: 
-            # Atmospheric boundary limits check
-            if (self.head[self.n_1] <= self.ha) and (flux_top >= 0): 
-                is_dirichlet = True
-                active_head = self.ha
-            elif (self.head[self.n_1] >= 0): 
-                is_dirichlet = True
-                active_head = pond
- 
-        if is_dirichlet:
-            self.B[self.n_1] = 1.0
-            self.A[self.n_2] = 0.0
-            self.F[self.n_1] = 0.0
-            self.head[self.n_1] = active_head
+            self.B[self.n_1] = 1.0; self.A[self.n_2] = 0.0; self.F[self.n_1] = 0.0
+            self.head[self.n_1] = head_top
+     
+        elif atmosp == 0: 
+            if (self.head[self.n_1] < self.ha): 
+                self.head[self.n_1] = self.ha
+            elif (self.head[self.n_1] > self.pond_max): 
+                self.head[self.n_1] = self.pond_max
+            self.B[self.n_1] = 1.0; self.A[self.n_2] = 0.0; self.F[self.n_1] = 0.0
             
+   
         else:
             dz_low = self.z[self.n_1] - self.z[self.n_2]
             dz_cell = dz_low / 2.0
@@ -71,23 +62,24 @@ class CreateTriDiagonal:
             active_head = head_bot
             
         elif (self.bot_bound == 5):
+            dz_bot = self.z[1] - self.z[0] 
             if self.head[0] >= 0.0:
-                is_dirichlet = True
-                active_head = 0.0  # Saturated: acts as constant head of 0
+                if self.head[1] > -dz_bot:
+                    is_dirichlet = True
+                    active_head = 0.0
+                else:
+                    is_dirichlet = False
+                    active_flux = 0.0
             else:
-                active_flux = 0.0  # Unsaturated: acts as zero-flux boundary
+                is_dirichlet = False
+                active_flux = 0.0
 
-        # 3. Apply the appropriate matrix coefficients
         if is_dirichlet:
-            self.B[0] = 1.0
-            self.C[0] = 0.0
-            self.F[0] = 0.0
+            self.B[0] = 1.0; self.C[0] = 0.0;self.F[0] = 0.0
             self.head[0] = active_head
             
         elif self.bot_bound == 4:
-            # Free Drainage (Unit Hydraulic Gradient)
-            self.B[0] = 1.0
-            self.C[0] = -1.0
+            self.B[0] = 1.0;  self.C[0] = -1.0
             self.F[0] = self.head[1] - self.head[0]
             
         else:
@@ -100,15 +92,14 @@ class CreateTriDiagonal:
             gravity = k01 / dz_cell 
             self.F[0] = ((self.s1[0] - self.s2[0]) / dt + flux_up / dz_cell + gravity + active_flux / dz_cell  - sink[0])
         
-    def get_new(self,dt,h1,h2,tp,pond,head_top,head_bot,flux_top,flux_bot):
+    def get_new(self,dt,h1,h2,flux_top,flux_bot,head_top,head_bot,tp,atmosp):
+        self.soil_model.calculate_props(h1,h2)
         self.head[:] = h2[:]
-        self.root_model.calculate_sink_source(self.head,tp)
+        self.root_model.calculate_sink_source(h2,tp)
         sink = self.root_model.sink  
-        self.soil_model.calculate_props(h1,self.head)
         self.s1,self.s2,self.k,self.cap = self.soil_model.theta1,self.soil_model.theta2,self.soil_model.conduct,self.soil_model.capacity
-        self.set_top(dt,flux_top,head_top,pond,sink)
+        self.set_top(dt,flux_top,head_top,sink,atmosp)
         self.set_bot(dt,flux_bot,head_bot,sink)
-    
         for i in range(1,self.n-1):
             dz_low = self.z[i] - self.z[i - 1]
             dz_up = self.z[i + 1] - self.z[i]
@@ -122,8 +113,10 @@ class CreateTriDiagonal:
             flux_lower = k1 * (self.head[i] - self.head[i - 1]) / dz_low
             gravity = (k2 - k1) / dz_cell
             self.F[i] = (self.s1[i] - self.s2[i]) / dt + (flux_upper - flux_lower) / dz_cell  + gravity   - sink[i]
-        return + self.head + solve_thomas(self.A,self.B,self.C,self.F)
         
+        return self.head + solve_thomas(self.A,self.B,self.C,self.F)
+        
+
 @njit
 def solve_thomas(A,B,C,F):
     n = B.shape[0]
@@ -131,12 +124,18 @@ def solve_thomas(A,B,C,F):
     alfa[0] = B[0]
     beta[0] = (C[0] / alfa[0])
     y[0] = F[0] / alfa[0]
+    
     for i in range(1,n):
         alfa[i] = B[i] - A[i - 1] * beta[i - 1]
-        beta[i] = C[i] / alfa[i]
+        
+        # FIX: Only calculate beta if we are not on the last row
+        if i < n - 1:
+            beta[i] = C[i] / alfa[i]
+            
         y[i] = (F[i] - y[i - 1] * A[i - 1]) / alfa[i]
+        
     h_new[n - 1] = y[n - 1]
     for j in range(1,n):
         r = int(n) - 1 - j
-        h_new[r] = y[r] - beta[r] *  h_new[r + 1]
+        h_new[r] = y[r] - beta[r] * h_new[r + 1]
     return h_new
