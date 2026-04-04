@@ -21,11 +21,12 @@ class NumericSolver:
     def __init__(self,soil_model,diagonal_model,root_model,sim_time,sim_temp,ini_head,flux_top,flux_bot,head_top,head_bot,transp):
         self.soil_model,self.diagonal_model,self.root_model = soil_model,diagonal_model,root_model #other class type inputs
         self.sim_time,self.sim_temp = sim_time,sim_temp # controlling simulation time
-        self.ini_head = ini_head # initialized head!
-        self.hnew = np.zeros(self.ini_head.shape)
+        self.hnew = np.zeros(ini_head.shape)
+        self.ini_head = np.zeros(ini_head.shape)
+        self.ini_head[:] = ini_head[:]
         self.hnew[:] = self.ini_head[:]
         self.transp = transp
-        self.dt_min, self.dt_max,self.dt,self.dt_new = 1 / 60,144.0,1.5,1.5
+        self.dt_min, self.dt_max,self.dt,self.dt_new = 1 / 60,144.0,0.1,1.5
         self.stat = 1
         self.flux_top,self.flux_bot = flux_top,flux_bot
         self.head_top,self.head_bot = head_top,head_bot
@@ -35,41 +36,68 @@ class NumericSolver:
 
     def control_dt(self,dt,i):
         if (i<=3):
-            if dt * 1.2 < self.dt_max:
-                return dt * 1.2
+            if dt * 1.3 < self.dt_max:
+                return dt * 1.3
             else:
                 return self.dt_max
         elif (i > 7):
             if (dt * 0.8 > self.dt_min):
-                return dt * 0.7
+                return dt * 0.8
             else:
                 return self.dt_min
         else:
             return dt 
         
-    def IterateTime(self,index,atmosp):
-        eps_sm = 10 ** -6
+    def IterateTime(self,index):
+        eps_sm = 10 ** -4
         eps_h = 0.1
         self.hnew[:] = self.ini_head[:]
-        self.stat = 0.5
-        for i in range(0,15,1):
+        self.stat = 1
+        current_atmosp = 1
+        i = 0
+        while (i < 20):
             hx = self.diagonal_model.get_new(self.dt, self.ini_head,self.hnew,self.flux_top[index],self.flux_bot[index],
-                                             self.head_top[index],self.head_bot[index],self.transp[index],atmosp)
-        
+                                             self.head_top[index],self.head_bot[index],self.transp[index], current_atmosp)
+            
+            n1 = hx.shape[0]-1
+           
+            if (self.top_bound == 4):
+                if not (self.ha < hx[n1] < self.hs):          
+                    # === WE CROSSED THE BOUNDARY ===
+                    if current_atmosp == 1:
+                        current_atmosp = 0
+                        self.hnew[:] = hx[:]                       
+                        
+                        # force top node exactly to the Dirichlet value
+                        if hx[n1] > self.hs:
+                            self.hnew[n1] = self.hs
+                        else:
+                            self.hnew[n1] = self.ha
+                        
+                        # CRITICAL FIX: Restart the loop immediately!
+                        # Do not check errors, do not overwrite hnew. 
+                        # Rebuild the matrix with the forced saturated head.
+                        continue 
+                else:
+                    current_atmosp = 1
+            
+            # Error checking now only happens if we DID NOT just switch boundaries
             err_sm,err_h = self.soil_model.get_errors(self.hnew,hx)
+            
             self.hnew[:] = hx[:] 
-            if (err_sm <= eps_sm ) and (err_h <=  eps_h):
+            
+            if (err_sm <= eps_sm) and (err_h<=eps_h):
                  self.stat = 0
                  break
+            i +=1
+            
         self.dt_new = self.control_dt(self.dt,i)
-        return hx 
+        return hx
         
     def RunSolver(self):
         r,c = self.flux_top.shape[0],self.ini_head.shape[0]
         hout,sout = np.zeros((r+1,c)), np.zeros((r+1,c))
-        
         hout[0,:] = self.ini_head[:]
-        n1 = hout.shape[0]-1
         sout[0,:] = self.soil_model.only_moisture(self.ini_head)[:]
         count_time, ind_time= 0.0,0.0
         index = int(0)
@@ -78,27 +106,20 @@ class NumericSolver:
             if self.dt > save_time:
                 self.dt = save_time
            
-            hnew = self.IterateTime(index,1)
-            if (self.top_bound==4):
-                if (self.ha <= hnew[n1]<=self.hs):
-                    x = 5 # dummy 
-                else:
-                    hnew = self.IterateTime(index,0)
-            
+            hnew = self.IterateTime(index)
             if self.stat != 0:
-                self.dt = self.dt / 2
+                self.dt = self.dt / 3
                 if self.dt < self.dt_min:
                     raise ValueError(f"Solver failed to converge. dt dropped below {self.dt_min}")
 
             else:
-                self.dt = self.dt_new 
-                self.ini_head[:] = hnew[:]
                 count_time += self.dt
                 ind_time += self.dt
-
-            if ind_time >= self.sim_temp:
-                hout[index+1,:] = self.ini_head[:]
-                sout[index+1,:] = self.soil_model.only_moisture(self.ini_head)
-                ind_time = ind_time - self.sim_temp
-                index +=1 
-        return hout
+                self.dt = self.dt_new 
+                self.ini_head[:] = hnew[:]  
+                if ind_time >= self.sim_temp:
+                    hout[index+1,:] = self.ini_head[:]
+                    sout[index+1,:] = self.soil_model.only_moisture(self.ini_head)
+                    ind_time = ind_time - self.sim_temp
+                    index +=1 
+        return sout

@@ -87,15 +87,15 @@ class SoilModels:
         #The specific moisture capacity analytical formulation for brooks and corey and genuchten and numerical derivative for FXW and FXW-M1
         if self.method == 0:
             if h >= self.hb[i]:
-                return 0.0
+                return 10**-5
             return -(self.lamb[i] * (self.ths[i] - self.tr[i]) / h) * (self.hb[i] / h)**self.lamb[i]
 
         elif self.method == 1:
             if h >= 0.0:
-                return 0.0
+                return 10**-5
             ah = self.a[i] * np.abs(h)
             numerator = self.a[i] * self.m[i] * self.n[i] * (self.ths[i] - self.tr[i]) * (ah**(self.n[i] - 1.0))
-            denominator = 1.0 + ah**self.n[i]**(self.m[i] + 1.0)
+            denominator = (1.0 + ah**self.n[i])**(self.m[i] + 1.0)
             return numerator / denominator
         else:
             if h >=0:
@@ -118,20 +118,12 @@ class SoilModels:
         theta_err_max = 0.0
         head_err_max = 0.0
         for i in range(h_old.shape[0]):
-            # 1. Calculate absolute moisture difference
-            theta_old = self.soil_moisture(h_old[i], i)
-            theta_new = self.soil_moisture(h_new[i], i)
-            theta_err = abs(theta_old - theta_new)
-            
+            theta_err = abs( self.soil_moisture(h_old[i], i)- self.soil_moisture(h_new[i], i))
             if theta_err > theta_err_max:
                 theta_err_max = theta_err
-                
-            # 2. Calculate absolute head difference
             head_err = abs(h_old[i] - h_new[i])
-            
             if head_err > head_err_max:
-                head_err_max = head_err
-                
+                head_err_max = head_err     
         return theta_err_max, head_err_max
     
     def only_moisture(self,h):

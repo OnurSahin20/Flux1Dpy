@@ -20,7 +20,7 @@ class CreateTriDiagonal:
         self.root_model = root_model
         self.z = z
         self.n = self.z.shape[0]
-        self.ha,self.hs = -50000, 0
+        self.ha,self.hs = -50000, pond_max
         self.pond_max = pond_max
         self.A,self.B,self.C,self.F = np.zeros(self.n-1),np.zeros(self.n),np.zeros(self.n-1),np.zeros(self.n)
         self.s1,self.s2,self.k,self.cap = np.zeros(self.n),np.zeros(self.n),np.zeros(self.n),np.zeros(self.n)
@@ -40,7 +40,6 @@ class CreateTriDiagonal:
                 self.head[self.n_1] = self.pond_max
             self.B[self.n_1] = 1.0; self.A[self.n_2] = 0.0; self.F[self.n_1] = 0.0
             
-   
         else:
             dz_low = self.z[self.n_1] - self.z[self.n_2]
             dz_cell = dz_low / 2.0
@@ -104,8 +103,12 @@ class CreateTriDiagonal:
             dz_low = self.z[i] - self.z[i - 1]
             dz_up = self.z[i + 1] - self.z[i]
             dz_cell = (dz_up + dz_low) / 2.0
-            k1 = (self.k[i] + self.k[i - 1]) / 2.0
-            k2 = (self.k[i] + self.k[i + 1]) / 2.0
+            if atmosp == 1:
+                k1 = (self.k[i] + self.k[i - 1]) / 2.0
+                k2 = (self.k[i] + self.k[i + 1]) / 2.0
+            else:
+                k1 = np.sqrt(self.k[i] * self.k[i - 1])
+                k2 = np.sqrt(self.k[i] * self.k[i +1])
             self.A[i - 1] = -k1 / (dz_cell * dz_low)
             self.C[i] = -k2 / (dz_cell * dz_up)
             self.B[i] = (k1 / (dz_cell * dz_low)) + (k2 / (dz_cell * dz_up)) + (self.cap[i] / dt)

@@ -14,7 +14,7 @@ NMat NLay CosAlfa
 2 1 1
 *** BLOCK B: WATER FLOW INFORMATION **********************************************
 MaxIt  TolTh  TolH   (maximum number of iterations and tolerances)
-10   0.001   1
+10   0.0001   1
 TopInf  WLayer  KodTop  lInitW  
 t t -1 f 
 BotInf  qGWLF  FreeD  SeepF  KodBot  qDrain  hSeep  
