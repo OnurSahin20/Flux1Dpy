@@ -4,7 +4,7 @@
  Units: L = cm   , T = days , M = mmol 
 
  CosAlf,MaxIt,TolTh,  TolH
- 1.000   10   0.000 1.00000
+ 1.000   10   0.000 0.20000
 
  TopInF,BotInF,AtmBC,SinkF,WLayer,qGWLF,FreeD,SeepF,lWat,lChem,lTemp,lRoot,lWDep
      T     F     T     F     T     F     T     F     T     F     F     F     F

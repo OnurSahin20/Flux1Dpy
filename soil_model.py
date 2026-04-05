@@ -136,5 +136,16 @@ class SoilModels:
     def calculate_darcy(self,dz,h):
         n = h.shape[0]
         k = (self.hydraulic_conductivity(h[n-1],n-1) + self.hydraulic_conductivity(h[n-2],n-2)) / 2 # averaged. constant dz
-        qdarcy=  - k * ((h[n-1]-h[n-2])/dz + 1)
-        return qdarcy
+        return - k * ((h[n-1]-h[n-2])/dz + 1)
+    
+    def calculate_pond(self,h,pond_old,dt,dz_top,flux_top,pond_max):
+        qdarcy = self.calculate_darcy(dz_top,h)
+        
+        pond_new = pond_old + (-flux_top + qdarcy) * dt
+
+        if pond_new >pond_max:
+            return pond_max
+        if pond_new < 0:
+            return 0
+        else:
+            return pond_new

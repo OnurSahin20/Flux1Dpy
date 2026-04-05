@@ -6,7 +6,6 @@ from soil_model import SoilModels
 from source_sink import RootWaterUptake
 from numba import njit
 
-
 soil_model_type = SoilModels.class_type.instance_type
 root_model_type = RootWaterUptake.class_type.instance_type
 spec = {"soil_model":soil_model_type,"root_model":root_model_type,'top_bound':int32,'bot_bound':int32,'z':float64[:],'n':int32,"ha":float64,'hs':float64,
@@ -30,16 +29,11 @@ class CreateTriDiagonal:
     
     def set_top(self, dt, flux_top, head_top,sink,atmosp):
         if self.top_bound == 0 or self.top_bound == 2: 
-            self.B[self.n_1] = 1.0; self.A[self.n_2] = 0.0; self.F[self.n_1] = 0.0
-            self.head[self.n_1] = head_top
+            self.B[self.n_1] = 1.0; self.A[self.n_2] = 0.0; self.F[self.n_1] = 0.0;self.head[self.n_1] = head_top
      
-        elif atmosp == 0: 
-            if (self.head[self.n_1] < self.ha): 
-                self.head[self.n_1] = self.ha
-            elif (self.head[self.n_1] > self.pond_max): 
-                self.head[self.n_1] = self.pond_max
-            self.B[self.n_1] = 1.0; self.A[self.n_2] = 0.0; self.F[self.n_1] = 0.0
-            
+        elif atmosp == 0:
+            self.B[self.n_1] = 1.0; self.A[self.n_2] = 0.0; self.F[self.n_1] = 0
+
         else:
             dz_low = self.z[self.n_1] - self.z[self.n_2]
             dz_cell = dz_low / 2.0
@@ -48,8 +42,7 @@ class CreateTriDiagonal:
             self.B[self.n_1] = self.cap[self.n_1] / dt + k11 / (dz_cell * dz_low)
             flux_low = k11 * (self.head[self.n_1] - self.head[self.n_2]) / dz_low
             gravity = -k11 / dz_cell 
-            self.F[self.n_1] = ((self.s1[self.n_1] - self.s2[self.n_1]) / dt - flux_low / dz_cell 
-                                + gravity - flux_top / dz_cell - sink[self.n_1])
+            self.F[self.n_1] = ((self.s1[self.n_1] - self.s2[self.n_1]) / dt - flux_low / dz_cell + gravity - flux_top / dz_cell - sink[self.n_1])
     
     def set_bot(self, dt, flux_bot, head_bot, sink):
         is_dirichlet = False
@@ -92,12 +85,12 @@ class CreateTriDiagonal:
             self.F[0] = ((self.s1[0] - self.s2[0]) / dt + flux_up / dz_cell + gravity + active_flux / dz_cell  - sink[0])
         
     def get_new(self,dt,h1,h2,flux_top,flux_bot,head_top,head_bot,tp,atmosp):
-        self.soil_model.calculate_props(h1,h2)
         self.head[:] = h2[:]
-        self.root_model.calculate_sink_source(h2,tp)
+        self.soil_model.calculate_props(h1,self.head)
+        self.root_model.calculate_sink_source(h1,tp)
         sink = self.root_model.sink  
         self.s1,self.s2,self.k,self.cap = self.soil_model.theta1,self.soil_model.theta2,self.soil_model.conduct,self.soil_model.capacity
-        self.set_top(dt,flux_top,head_top,sink,atmosp)
+        self.set_top(dt,flux_top,head_top,sink,atmosp)      
         self.set_bot(dt,flux_bot,head_bot,sink)
         for i in range(1,self.n-1):
             dz_low = self.z[i] - self.z[i - 1]
@@ -127,11 +120,8 @@ def solve_thomas(A,B,C,F):
     alfa[0] = B[0]
     beta[0] = (C[0] / alfa[0])
     y[0] = F[0] / alfa[0]
-    
     for i in range(1,n):
         alfa[i] = B[i] - A[i - 1] * beta[i - 1]
-        
-        # FIX: Only calculate beta if we are not on the last row
         if i < n - 1:
             beta[i] = C[i] / alfa[i]
             

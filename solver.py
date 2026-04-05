@@ -12,19 +12,18 @@ root_type= RootWaterUptake.class_type.instance_type
 spec = {"soil_model":soil_model_type,"diagonal_model":tridiagonal_type, "root_model":root_type,
         "sim_time":float64,"sim_temp":float64,"dt_min":float64,"ini_head":float64[:],
         "transp":float64[:], 'dt_max':float64, 'ha':float64, 'hs':float64,
-        'hnew':float64[:],'dt':float64,"dt_new":float64,'stat':int32,
+        'hnew':float64[:],'dt':float64,"dt_new":float64,'stat':int32, 'n1':int32,
         "flux_top":float64[:],'flux_bot':float64[:], 'top_bound':int32,
         "head_top":float64[:],'head_bot':float64[:]}
 
 @jitclass(spec)
 class NumericSolver:
     def __init__(self,soil_model,diagonal_model,root_model,sim_time,sim_temp,ini_head,flux_top,flux_bot,head_top,head_bot,transp):
-        self.soil_model,self.diagonal_model,self.root_model = soil_model,diagonal_model,root_model #other class type inputs
-        self.sim_time,self.sim_temp = sim_time,sim_temp # controlling simulation time
+        self.soil_model,self.diagonal_model,self.root_model = soil_model,diagonal_model,root_model
+        self.sim_time,self.sim_temp = sim_time,sim_temp
         self.hnew = np.zeros(ini_head.shape)
         self.ini_head = np.zeros(ini_head.shape)
         self.ini_head[:] = ini_head[:]
-        self.hnew[:] = self.ini_head[:]
         self.transp = transp
         self.dt_min, self.dt_max,self.dt,self.dt_new = 1 / 60,144.0,0.1,1.5
         self.stat = 1
@@ -33,6 +32,7 @@ class NumericSolver:
         self.top_bound = self.diagonal_model.top_bound
         self.ha = self.diagonal_model.ha
         self.hs = self.diagonal_model.pond_max
+        self.n1 = self.ini_head.shape[0] - 1
 
     def control_dt(self,dt,i):
         if (i<=3):
@@ -48,52 +48,57 @@ class NumericSolver:
         else:
             return dt 
         
-    def IterateTime(self,index):
+    def IterateTime(self, index, pond): # 1. Pass pond as an argument
         eps_sm = 10 ** -4
-        eps_h = 0.1
+        eps_h = 0.2
         self.hnew[:] = self.ini_head[:]
         self.stat = 1
-        current_atmosp = 1
+        
+        if pond > 0:
+            current_atmosp = 0
+            dirichlet = 1
+            self.hnew[self.n1] = pond
+        else:
+            current_atmosp = 1
+            dirichlet = 0
+            
         i = 0
-        while (i < 20):
-            hx = self.diagonal_model.get_new(self.dt, self.ini_head,self.hnew,self.flux_top[index],self.flux_bot[index],
-                                             self.head_top[index],self.head_bot[index],self.transp[index], current_atmosp)
+        while (i < 10):
+            hx = self.diagonal_model.get_new(self.dt, self.ini_head, self.hnew,
+                                             self.flux_top[index], self.flux_bot[index],
+                                             self.head_top[index], self.head_bot[index],
+                                             self.transp[index], current_atmosp)
+          
             
-            n1 = hx.shape[0]-1
-           
             if (self.top_bound == 4):
-                if not (self.ha < hx[n1] < self.hs):          
-                    # === WE CROSSED THE BOUNDARY ===
-                    if current_atmosp == 1:
+                if (dirichlet == 0):
+                    if (self.ha < hx[self.n1] < 0):          
+                        current_atmosp = 1
+                    else:
                         current_atmosp = 0
-                        self.hnew[:] = hx[:]                       
-                        
-                        # force top node exactly to the Dirichlet value
-                        if hx[n1] > self.hs:
-                            self.hnew[n1] = self.hs
+                        dirichlet = 1
+                        self.hnew[:] = self.ini_head[:]
+                        if hx[self.n1] >= 0: # (Assuming self.hs is 0)
+                            self.hnew[self.n1] = 0  # New pond is just forming, start at 0
                         else:
-                            self.hnew[n1] = self.ha
-                        
-                        # CRITICAL FIX: Restart the loop immediately!
-                        # Do not check errors, do not overwrite hnew. 
-                        # Rebuild the matrix with the forced saturated head.
-                        continue 
+                            self.hnew[self.n1] = self.ha
+                        i = 0 
+                        continue
                 else:
-                    current_atmosp = 1
-            
-            # Error checking now only happens if we DID NOT just switch boundaries
-            err_sm,err_h = self.soil_model.get_errors(self.hnew,hx)
-            
+                    if hx[self.n1] >= 0:
+                        self.hnew[self.n1] = pond  # 3. USE POND HERE instead of 0
+                    else:
+                        self.hnew[self.n1] = self.ha
+            i += 1            
+            err_sm, err_h = self.soil_model.get_errors(self.hnew, hx)
             self.hnew[:] = hx[:] 
-            
-            if (err_sm <= eps_sm) and (err_h<=eps_h):
+            if (err_sm <= eps_sm) and (err_h <= eps_h):
                  self.stat = 0
                  break
-            i +=1
             
-        self.dt_new = self.control_dt(self.dt,i)
+        self.dt_new = self.control_dt(self.dt, i)
         return hx
-        
+    
     def RunSolver(self):
         r,c = self.flux_top.shape[0],self.ini_head.shape[0]
         hout,sout = np.zeros((r+1,c)), np.zeros((r+1,c))
@@ -101,18 +106,24 @@ class NumericSolver:
         sout[0,:] = self.soil_model.only_moisture(self.ini_head)[:]
         count_time, ind_time= 0.0,0.0
         index = int(0)
+        pond = 0
         while (count_time<self.sim_time):
             save_time = self.sim_temp - ind_time
             if self.dt > save_time:
                 self.dt = save_time
            
-            hnew = self.IterateTime(index)
+            hnew = self.IterateTime(index,pond)
             if self.stat != 0:
                 self.dt = self.dt / 3
                 if self.dt < self.dt_min:
                     raise ValueError(f"Solver failed to converge. dt dropped below {self.dt_min}")
 
             else:
+                if  hnew[self.n1] >= 0: 
+                    pond = self.soil_model.calculate_pond(hnew,pond,self.dt,1,self.flux_top[index],self.hs)
+                else:
+                    pond = 0
+                
                 count_time += self.dt
                 ind_time += self.dt
                 self.dt = self.dt_new 
@@ -121,5 +132,5 @@ class NumericSolver:
                     hout[index+1,:] = self.ini_head[:]
                     sout[index+1,:] = self.soil_model.only_moisture(self.ini_head)
                     ind_time = ind_time - self.sim_temp
-                    index +=1 
-        return sout
+                    index +=1
+        return hout,sout

@@ -8,7 +8,7 @@ hCritS (max. allowed pressure head at the soil surface)
 3.0
  tAtm  Prec  rSoil  rRoot  hCritA  rB  hB  ht  tTop  tBot  Ampl  cTop  cBot
     2     6      0      0   50000   0   0   0     0     0     0   0.0   0.0
-    5     4      0      0   50000   0   0   0     0     0     0   0.0   0.0
+    5    10      0      0   50000   0   0   0     0     0     0   0.0   0.0
     7     2      0      0   50000   0   0   0     0     0     0   0.0   0.0
    10     0      0      0   50000   0   0   0     0     0     0   0.0   0.0
    20     0      1      0   50000   0   0   0     0     0     0   0.0   0.0

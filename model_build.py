@@ -1,5 +1,4 @@
 import numpy as np
-import os 
 from numba.typed import Dict
 from numba import types
 from soil_model import SoilModels
@@ -35,7 +34,6 @@ class InfiltrationModel:
                 raise ValueError(f'Simulation time and size of vectors should have to consistent for boundary {self.top_bound}')
   
         self.validate_components()
-       
         solver = NumericSolver(self.numba_soil,self.numba_tridia,self.numba_root,self.sim_time,self.temp_time,hini,flux_top,flux_bot,
                                head_top,head_bot,trans)
         return solver.RunSolver()
