@@ -60,7 +60,7 @@ model.set_boundary_conditions(hini, bound_top, bound_bot, pond_max)
 
 # Returns arrays for pressure head, saturation, and root water uptake sink
 hout, sout, sink_out = model.set_run_solver(hini, flux, flux_bot, head_top, head_bot, trans)
-
+```
 ## 🔮 Future Studies
 The solver is actively being developed. Upcoming features and research focus areas include:
 * **Real-World Case Studies:** Validating the model's accuracy using data directly from in-situ soil moisture sensors.
