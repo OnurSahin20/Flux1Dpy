@@ -12,7 +12,8 @@ class InfiltrationModel:
         self.discrete = discrete
         self.z,self.nodes = self.set_grid()
         self.numba_soil,self.numba_root, self.numba_tridia = None, None, None
-        self.check  = int(self.sim_time / self.temp_time) # use later the check the size of the numpy arrays!
+        self.check  = int(self.sim_time / self.temp_time)
+
 
     def validate_components(self):
         for attr in ['numba_soil', 'numba_root', 'numba_tridia']:
@@ -38,9 +39,9 @@ class InfiltrationModel:
                                head_top,head_bot,trans)
         return solver.RunSolver()
         
-    def set_soil_model(self,hydraulic_model,soil_data) -> None:
-        options = {'BC':0,"VGM":1,'FXW':2,'FXW-M1':3}
-        if hydraulic_model== "VGM":
+    def set_soil_model(self,hydraulic_model,soil_data,test=False) -> None:
+        options = {'BC':0,"VGM":1,'FXW':2,'FXW-M1':3,'VGM-AE':4}
+        if (hydraulic_model== "VGM") or (hydraulic_model== "VGM-AE") :
             req_params = ["a","n","m","tr","ths","ks","L"]
         elif hydraulic_model == "BC":
             req_params = ['lamb','hb',"tr","ths","ks"]
@@ -57,8 +58,12 @@ class InfiltrationModel:
         key_type,value_type = types.unicode_type,types.float64[::1] 
         self.soil_params = Dict.empty(key_type, value_type)
         for param in soil_data.keys():
-            profile = self.create_vertical_profile(np.array(soil_data[param]))
-            self.soil_params[param] = np.ascontiguousarray(profile, dtype=np.float64)
+            if test:
+                profile = np.array([soil_data[param][0]]*self.z.shape[0])
+                self.soil_params[param] = np.ascontiguousarray(profile, dtype=np.float64)
+            else:
+                profile = self.create_vertical_profile(np.array(soil_data[param]))
+                self.soil_params[param] = np.ascontiguousarray(profile, dtype=np.float64)
         
         self.numba_soil= SoilModels(options[self.hydro_model],self.soil_params)
 
@@ -72,8 +77,8 @@ class InfiltrationModel:
         self.root_params = Dict.empty(key_type, value_type)
         for param in root_params.keys():
             self.root_params[param] = root_params[param] 
-        bx = self.create_root_distribution()
-        self.numba_root = RootWaterUptake(options[self.root_model],self.root_params,bx)
+        self.bx = self.create_root_distribution()
+        self.numba_root = RootWaterUptake(options[self.root_model],self.root_params,self.bx)
     
     def set_boundary_conditions(self,hini,top_bound,bot_bound,ponding=0) -> None:
         self.top_bound,self.bot_bound = top_bound,bot_bound
@@ -103,9 +108,9 @@ class InfiltrationModel:
         return vertic_prof
 
     def create_root_distribution(self) -> np.ndarray:
-        bx = np.zeros(self.nodes, dtype=np.float64)
+        bx = np.zeros(self.z.shape[0], dtype=np.float64)
         z_surf = self.z[-1]
-        for i in range(self.nodes):
+        for i in range(self.z.shape[0]):
             depth = z_surf - self.z[i]
             if i < self.nodes - 1:
                 local_dz = self.z[i+1] - self.z[i]
@@ -122,12 +127,7 @@ class InfiltrationModel:
                     bx[i] = bx_intensity * local_dz
                     
                 elif self.root_dist == "uniform":
-                    bx_intensity = 1.0 / self.rzl
-                    bx[i] = bx_intensity * local_dz
-
-        total_roots = np.sum(bx)
-        if total_roots > 0:
-            bx = bx / total_roots  
+                    bx[i] = 1.0 / self.rzl
         return bx
 
 

@@ -33,6 +33,9 @@ class NumericSolver:
         self.ha = self.diagonal_model.ha
         self.hs = self.diagonal_model.pond_max
         self.n1 = self.ini_head.shape[0] - 1
+        self.dz = self.calculate_dz()
+        print(self.dz)
+        raise ValueError
 
     def control_dt(self,dt,i):
         if (i<=3):
@@ -47,13 +50,12 @@ class NumericSolver:
                 return self.dt_min
         else:
             return dt 
-        
+    
+ 
     def IterateTime(self, index, pond): # 1. Pass pond as an argument
-        eps_sm = 10 ** -4
-        eps_h = 0.2
+        eps_sm,eps_h = 10 ** -3,1
         self.hnew[:] = self.ini_head[:]
         self.stat = 1
-        
         if pond > 0:
             current_atmosp = 0
             dirichlet = 1
@@ -64,12 +66,9 @@ class NumericSolver:
             
         i = 0
         while (i < 10):
-            hx = self.diagonal_model.get_new(self.dt, self.ini_head, self.hnew,
-                                             self.flux_top[index], self.flux_bot[index],
-                                             self.head_top[index], self.head_bot[index],
-                                             self.transp[index], current_atmosp)
-          
-            
+            hx = self.diagonal_model.get_new(self.dt, self.ini_head, self.hnew,self.flux_top[index], self.flux_bot[index],
+                                             self.head_top[index], self.head_bot[index],self.transp[index], current_atmosp)
+        
             if (self.top_bound == 4):
                 if (dirichlet == 0):
                     if (self.ha < hx[self.n1] < 0):          
@@ -78,15 +77,15 @@ class NumericSolver:
                         current_atmosp = 0
                         dirichlet = 1
                         self.hnew[:] = self.ini_head[:]
-                        if hx[self.n1] >= 0: # (Assuming self.hs is 0)
-                            self.hnew[self.n1] = 0  # New pond is just forming, start at 0
+                        if hx[self.n1] >= 0:
+                            self.hnew[self.n1] = 0
                         else:
                             self.hnew[self.n1] = self.ha
                         i = 0 
                         continue
                 else:
                     if hx[self.n1] >= 0:
-                        self.hnew[self.n1] = pond  # 3. USE POND HERE instead of 0
+                        self.hnew[self.n1] = pond 
                     else:
                         self.hnew[self.n1] = self.ha
             i += 1            
@@ -100,13 +99,14 @@ class NumericSolver:
         return hx
     
     def RunSolver(self):
+        count_time, ind_time,index,pond= 0.0,0.0,int(0),0
+        dz_top = self.diagonal_model.dz_top
         r,c = self.flux_top.shape[0],self.ini_head.shape[0]
-        hout,sout = np.zeros((r+1,c)), np.zeros((r+1,c))
+        hout,sout,sink_out,vroot = np.zeros((r+1,c)), np.zeros((r+1,c)),np.zeros((r+1,c)), 0 
         hout[0,:] = self.ini_head[:]
         sout[0,:] = self.soil_model.only_moisture(self.ini_head)[:]
-        count_time, ind_time= 0.0,0.0
-        index = int(0)
-        pond = 0
+        self.root_model.calculate_sink_source(self.ini_head,self.transp[index])  
+        sink_out[0,:] = self.root_model.sink * 1440
         while (count_time<self.sim_time):
             save_time = self.sim_temp - ind_time
             if self.dt > save_time:
@@ -120,7 +120,7 @@ class NumericSolver:
 
             else:
                 if  hnew[self.n1] >= 0: 
-                    pond = self.soil_model.calculate_pond(hnew,pond,self.dt,1,self.flux_top[index],self.hs)
+                    pond = self.soil_model.calculate_pond(hnew,pond,self.dt,dz_top,self.flux_top[index],self.hs)
                 else:
                     pond = 0
                 
@@ -131,6 +131,8 @@ class NumericSolver:
                 if ind_time >= self.sim_temp:
                     hout[index+1,:] = self.ini_head[:]
                     sout[index+1,:] = self.soil_model.only_moisture(self.ini_head)
+                    self.root_model.calculate_sink_source(self.ini_head,self.transp[index])  
+                    sink_out[index+1,:] = self.root_model.sink
                     ind_time = ind_time - self.sim_temp
                     index +=1
-        return hout,sout
+        return hout,sout,sink_out

@@ -9,7 +9,7 @@ from numba import njit
 soil_model_type = SoilModels.class_type.instance_type
 root_model_type = RootWaterUptake.class_type.instance_type
 spec = {"soil_model":soil_model_type,"root_model":root_model_type,'top_bound':int32,'bot_bound':int32,'z':float64[:],'n':int32,"ha":float64,'hs':float64,
-        "A":float64[:],"B":float64[:],"C":float64[:],"F":float64[:], 'head':float64[:], 'pond_max':float64,
+        "A":float64[:],"B":float64[:],"C":float64[:],"F":float64[:], 'head':float64[:], 'pond_max':float64, 'dz_top':float64,'dz':float64[:],
         's1':float64[:],'s2':float64[:],'k':float64[:],'cap':float64[:],'n_1':int32,'n_2':int32} # defining the tridiagonals
 
 @jitclass(spec)
@@ -18,6 +18,7 @@ class CreateTriDiagonal:
         self.soil_model = soil_model
         self.root_model = root_model
         self.z = z
+        
         self.n = self.z.shape[0]
         self.ha,self.hs = -50000, pond_max
         self.pond_max = pond_max
@@ -25,8 +26,9 @@ class CreateTriDiagonal:
         self.s1,self.s2,self.k,self.cap = np.zeros(self.n),np.zeros(self.n),np.zeros(self.n),np.zeros(self.n)
         self.top_bound,self.bot_bound  = top_bound,bot_bound
         self.n_1,self.n_2 = self.n - 1, self.n - 2
+        self.dz_top = abs(self.z[self.n_1] - self.z[self.n_2])
         self.head = np.zeros(self.n)
-    
+        self.dz = self.calculate_dz()
     def set_top(self, dt, flux_top, head_top,sink,atmosp):
         if self.top_bound == 0 or self.top_bound == 2: 
             self.B[self.n_1] = 1.0; self.A[self.n_2] = 0.0; self.F[self.n_1] = 0.0;self.head[self.n_1] = head_top
@@ -86,12 +88,13 @@ class CreateTriDiagonal:
         
     def get_new(self,dt,h1,h2,flux_top,flux_bot,head_top,head_bot,tp,atmosp):
         self.head[:] = h2[:]
-        self.soil_model.calculate_props(h1,self.head)
-        self.root_model.calculate_sink_source(h1,tp)
+        self.root_model.calculate_sink_source(self.head,tp)
         sink = self.root_model.sink  
+        self.soil_model.calculate_props(h1,self.head)
         self.s1,self.s2,self.k,self.cap = self.soil_model.theta1,self.soil_model.theta2,self.soil_model.conduct,self.soil_model.capacity
         self.set_top(dt,flux_top,head_top,sink,atmosp)      
         self.set_bot(dt,flux_bot,head_bot,sink)
+       
         for i in range(1,self.n-1):
             dz_low = self.z[i] - self.z[i - 1]
             dz_up = self.z[i + 1] - self.z[i]
@@ -112,7 +115,13 @@ class CreateTriDiagonal:
         
         return self.head + solve_thomas(self.A,self.B,self.C,self.F)
         
-
+    def calculate_dz(self):
+        self.dz = np.zeros(self.n1)
+        for i in range(self.n1):
+            self.dz[i] = self.z[i+1] - self.z[i]
+    
+    def calculate_vroot(self, sink) -> float:
+        return np.sum(sink * self.dz)
 @njit
 def solve_thomas(A,B,C,F):
     n = B.shape[0]

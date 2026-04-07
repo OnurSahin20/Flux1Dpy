@@ -16,7 +16,7 @@ class SoilModels:
         self.hs,self.h0,self.hr = -1,-0.63 * np.power(10,7),-1500
         if self.method == 0: #brooks and corey
             self.lamb,self.hb,self.tr,self.ths,self.ks =self.pars['lambda'],self.pars['hb'],self.pars['tr'],self.pars['ths'],self.pars['ks']
-        elif self.method == 1: # van genuchten
+        elif (self.method == 1) or (self.method==4): # van genuchten
             self.a,self.n,self.m,self.L,self.tr,self.ths,self.ks = self.pars["a"],self.pars["n"],self.pars["m"],self.pars["L"],self.pars["tr"],self.pars["ths"],self.pars["ks"]
         elif (self.method == 2) or (self.method==3): # FXW or FXW-M1 
             self.a,self.n,self.m,self.L,self.ths,self.ks = self.pars["a"],self.pars["n"],self.pars["m"],self.pars["L"],self.pars["ths"],self.pars["ks"]
@@ -29,37 +29,50 @@ class SoilModels:
     def correct_func(self, h, i):
         return np.power(np.log(np.e + np.power(np.abs(self.a[i] * h), self.n[i])), -self.m[i])
     
-    def soil_moisture(self,h,i):
+    def soil_moisture(self, h, i):
         if self.method == 0:
             if h >= self.hb[i]:
                 return self.ths[i]
             else:
                 return self.tr[i] + (self.ths[i] - self.tr[i]) * (self.hb[i] / h)**self.lamb[i]
-        elif self.method ==1:
-            if (h>=0): 
+        
+        elif self.method == 1:
+            if h >= 0: 
                 return self.ths[i]
             else:
                 ah = np.abs(self.a[i] * h)
                 return (self.ths[i] - self.tr[i]) / np.power(1 + np.power(ah, self.n[i]), self.m[i]) + self.tr[i]
+        
         elif self.method == 2:
             return (1 - np.log(1 + h / self.hr) / np.log(1 + self.h0 / self.hr)) * self.correct_func(h, i) * self.ths[i]
         
-        elif self.method ==3:
-            if (h < self.hs):
+        elif self.method == 3:
+            if h < self.hs:
                 return self.ths[i] * (1 - np.log(1 + (h - self.hs) / self.hr) / np.log(1 + (self.h0 - self.hs) / self.hr)) * self.correct_func(h, i) / self.correct_func(self.hs, i)
             else:
                 return self.ths[i]
-    
-    def hydraulic_conductivity(self,h,i):
+                
+        elif self.method == 4:  # VGM-AE (Vogel's Modified van Genuchten)
+            hs = -2.0  # Air-entry value
+            if h >= hs:
+                return self.ths[i]
+            else:
+                ah_s = np.abs(self.a[i] * hs)
+                se_s = np.power(1.0 + np.power(ah_s, self.n[i]), -self.m[i])
+                thm = self.tr[i] + (self.ths[i] - self.tr[i]) / se_s
+                ah = np.abs(self.a[i] * h)
+                se_star = np.power(1.0 + np.power(ah, self.n[i]), -self.m[i])
+                return self.tr[i] + (thm - self.tr[i]) * se_star
 
+    def hydraulic_conductivity(self, h, i):
         if self.method == 0:
             if h >= self.hb[i]:
                 return self.ks[i]
             else:
                 return self.ks[i] * (self.hb[i] / h)**(2.0 + 3.0 * self.lamb[i])
     
-        elif self.method ==1:
-            if (h>=0): 
+        elif self.method == 1:
+            if h >= 0: 
                 return self.ks[i]
             else:
                 se = np.power((1 + np.power(np.abs(self.a[i] * h), self.n[i])), -self.m[i])
@@ -73,7 +86,7 @@ class SoilModels:
             return self.ks[i] * np.power(sek,self.L[i]) * np.power(1 - np.power(1 - np.power(rh,1/self.m[i]),1-1/self.n[i]),2)
         
         elif self.method == 3:
-            if (h < self.hs):
+            if h < self.hs:
                 rh = self.correct_func(h, i)
                 r0 = self.correct_func(self.h0, i)
                 rs = self.correct_func(self.hs, i)
@@ -82,30 +95,59 @@ class SoilModels:
                 return self.ks[i] * np.power((rh - r0) / (rs - r0), self.L[i]) * np.power(nom / denom, 2)
             else: 
                 return self.ks[i]
+                
+        elif self.method == 4:  # VGM-AE (Vogel's Modified van Genuchten)
+            hs = -2.0
+            if h >= hs:
+                return self.ks[i]
+            else:
+                ah_s = np.abs(self.a[i] * hs)
+                se_s = np.power(1.0 + np.power(ah_s, self.n[i]), -self.m[i])   # S_e^*
+                ah = np.abs(self.a[i] * h)
+                se_star = np.power(1.0 + np.power(ah, self.n[i]), -self.m[i])  # S_e
+                term_num = (se_star ** self.L[i]) * (1.0 - (1.0 - se_star ** (1.0 / self.m[i])) ** self.m[i]) ** 2
+                term_den = (se_s ** self.L[i]) * (1.0 - (1.0 - se_s ** (1.0 / self.m[i])) ** self.m[i]) ** 2
+                return self.ks[i] * (term_num / term_den)
 
-    def calculate_capacity(self,h,i): 
-        #The specific moisture capacity analytical formulation for brooks and corey and genuchten and numerical derivative for FXW and FXW-M1
+    def calculate_capacity(self, h, i): 
         if self.method == 0:
             if h >= self.hb[i]:
-                return 10**-5
+                return 0
             return -(self.lamb[i] * (self.ths[i] - self.tr[i]) / h) * (self.hb[i] / h)**self.lamb[i]
 
         elif self.method == 1:
             if h >= 0.0:
-                return 10**-5
+                return 0
             ah = self.a[i] * np.abs(h)
             numerator = self.a[i] * self.m[i] * self.n[i] * (self.ths[i] - self.tr[i]) * (ah**(self.n[i] - 1.0))
             denominator = (1.0 + ah**self.n[i])**(self.m[i] + 1.0)
             return numerator / denominator
-        else:
-            if h >=0:
+            
+        elif self.method in [2, 3]:
+            if h >= 0:
                 return 0
             else:
                 f0 = self.soil_moisture(h, i)
                 dh = h * np.power(10, -3)
                 f1 = self.soil_moisture(h + dh, i)
-                return (f1-f0) / dh
-            
+                return (f1 - f0) / dh
+                
+        elif self.method == 4:  # VGM-AE
+            hs = -2.0
+            if h >= hs:
+                return 10**-3# Prevents division-by-zero singularities in the matrix
+            else:
+                # 1. Get Se at air entry to find fictitious thm
+                ah_s = np.abs(self.a[i] * hs)
+                se_s = np.power(1.0 + np.power(ah_s, self.n[i]), -self.m[i])
+                thm = self.tr[i] + (self.ths[i] - self.tr[i]) / se_s
+                
+                # 2. Calculate capacity using thm instead of ths
+                ah = self.a[i] * np.abs(h)
+                numerator = self.a[i] * self.m[i] * self.n[i] * (thm - self.tr[i]) * (ah**(self.n[i] - 1.0))
+                denominator = (1.0 + ah**self.n[i])**(self.m[i] + 1.0)
+                return numerator / denominator            
+    
     def calculate_props(self,h1,h2):
         n = h1.shape[0]
         for i in range(0,n):
@@ -143,7 +185,7 @@ class SoilModels:
         
         pond_new = pond_old + (-flux_top + qdarcy) * dt
 
-        if pond_new >pond_max:
+        if pond_new >= pond_max:
             return pond_max
         if pond_new < 0:
             return 0
