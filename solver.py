@@ -33,9 +33,6 @@ class NumericSolver:
         self.ha = self.diagonal_model.ha
         self.hs = self.diagonal_model.pond_max
         self.n1 = self.ini_head.shape[0] - 1
-        self.dz = self.calculate_dz()
-        print(self.dz)
-        raise ValueError
 
     def control_dt(self,dt,i):
         if (i<=3):
@@ -106,7 +103,7 @@ class NumericSolver:
         hout[0,:] = self.ini_head[:]
         sout[0,:] = self.soil_model.only_moisture(self.ini_head)[:]
         self.root_model.calculate_sink_source(self.ini_head,self.transp[index])  
-        sink_out[0,:] = self.root_model.sink * 1440
+        sink_out[0,:] = self.root_model.sink
         while (count_time<self.sim_time):
             save_time = self.sim_temp - ind_time
             if self.dt > save_time:

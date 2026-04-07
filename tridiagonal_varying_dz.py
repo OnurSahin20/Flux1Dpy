@@ -28,7 +28,8 @@ class CreateTriDiagonal:
         self.n_1,self.n_2 = self.n - 1, self.n - 2
         self.dz_top = abs(self.z[self.n_1] - self.z[self.n_2])
         self.head = np.zeros(self.n)
-        self.dz = self.calculate_dz()
+        self.dz = np.zeros(self.n)
+        #self.dz = self.calculate_dz()
     def set_top(self, dt, flux_top, head_top,sink,atmosp):
         if self.top_bound == 0 or self.top_bound == 2: 
             self.B[self.n_1] = 1.0; self.A[self.n_2] = 0.0; self.F[self.n_1] = 0.0;self.head[self.n_1] = head_top
@@ -116,11 +117,11 @@ class CreateTriDiagonal:
         return self.head + solve_thomas(self.A,self.B,self.C,self.F)
         
     def calculate_dz(self):
-        self.dz = np.zeros(self.n1)
-        for i in range(self.n1):
+        self.dz = np.zeros(self.n_1)
+        for i in range(self.n_1):
             self.dz[i] = self.z[i+1] - self.z[i]
     
-    def calculate_vroot(self, sink) -> float:
+    def calculate_vroot(self, sink):
         return np.sum(sink * self.dz)
 @njit
 def solve_thomas(A,B,C,F):
