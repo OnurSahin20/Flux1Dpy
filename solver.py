@@ -25,7 +25,7 @@ class NumericSolver:
         self.ini_head = np.zeros(ini_head.shape)
         self.ini_head[:] = ini_head[:]
         self.transp = transp
-        self.dt_min, self.dt_max,self.dt,self.dt_new = 1 / 60,144.0,0.1,1.5
+        self.dt_min, self.dt_max,self.dt,self.dt_new = 1 / 60,144.0,1.5,1.5
         self.stat = 1
         self.flux_top,self.flux_bot = flux_top,flux_bot
         self.head_top,self.head_bot = head_top,head_bot
@@ -48,7 +48,6 @@ class NumericSolver:
         else:
             return dt 
     
- 
     def IterateTime(self, index, pond): # 1. Pass pond as an argument
         eps_sm,eps_h = 10 ** -3,1
         self.hnew[:] = self.ini_head[:]
@@ -116,7 +115,7 @@ class NumericSolver:
                     raise ValueError(f"Solver failed to converge. dt dropped below {self.dt_min}")
 
             else:
-                if  hnew[self.n1] >= 0: 
+                if hnew[self.n1] >= 0: 
                     pond = self.soil_model.calculate_pond(hnew,pond,self.dt,dz_top,self.flux_top[index],self.hs)
                 else:
                     pond = 0

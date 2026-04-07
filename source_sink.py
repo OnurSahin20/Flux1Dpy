@@ -3,7 +3,6 @@ from numba import float64,int32
 from numba.experimental import jitclass
 import numpy as np 
 
-
 # 1. Define the spec with unicode_type for the string
 spec = {
     'method': int32,'pars': DictType(unicode_type, float64),
@@ -12,13 +11,11 @@ spec = {
     'bx':float64[:],'sink': float64[:]
     }
 
-
 @jitclass(spec)
 class RootWaterUptake:
     def __init__(self,method,pars,bx):
         self.method = method
         self.pars = pars
-        
         if self.method == 0:
             self.p50,self.p0 = self.pars['p50'],self.pars['p0']
         elif self.method ==1:
@@ -29,14 +26,12 @@ class RootWaterUptake:
         self.sink  = np.zeros(self.bx.shape)
     
     def alfa_feddes(self,h,tp):
-       
         if tp > self.r2h:
             p2 = self.p2h
         elif tp < self.r2l:
             p2 = self.p2l
         else:
             p2 = self.p2l + (self.p2h - self.p2l) * (tp - self.r2l) / (self.r2h - self.r2l)
-       
        
         if h >= self.p0 or h <= self.p3:
             return 0

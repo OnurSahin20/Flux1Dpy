@@ -14,7 +14,6 @@ class InfiltrationModel:
         self.numba_soil,self.numba_root, self.numba_tridia = None, None, None
         self.check  = int(self.sim_time / self.temp_time)
 
-
     def validate_components(self):
         for attr in ['numba_soil', 'numba_root', 'numba_tridia']:
             if getattr(self, attr) is None:

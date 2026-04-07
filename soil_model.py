@@ -30,23 +30,23 @@ class SoilModels:
         return np.power(np.log(np.e + np.power(np.abs(self.a[i] * h), self.n[i])), -self.m[i])
     
     def soil_moisture(self, h, i):
-        if self.method == 0:
+        if self.method == 0: #BC
             if h >= self.hb[i]:
                 return self.ths[i]
             else:
                 return self.tr[i] + (self.ths[i] - self.tr[i]) * (self.hb[i] / h)**self.lamb[i]
         
-        elif self.method == 1:
+        elif self.method == 1: #VGM
             if h >= 0: 
                 return self.ths[i]
             else:
                 ah = np.abs(self.a[i] * h)
                 return (self.ths[i] - self.tr[i]) / np.power(1 + np.power(ah, self.n[i]), self.m[i]) + self.tr[i]
         
-        elif self.method == 2:
+        elif self.method == 2: #FXW
             return (1 - np.log(1 + h / self.hr) / np.log(1 + self.h0 / self.hr)) * self.correct_func(h, i) * self.ths[i]
         
-        elif self.method == 3:
+        elif self.method == 3: #FXW-M1
             if h < self.hs:
                 return self.ths[i] * (1 - np.log(1 + (h - self.hs) / self.hr) / np.log(1 + (self.h0 - self.hs) / self.hr)) * self.correct_func(h, i) / self.correct_func(self.hs, i)
             else:
@@ -102,9 +102,9 @@ class SoilModels:
                 return self.ks[i]
             else:
                 ah_s = np.abs(self.a[i] * hs)
-                se_s = np.power(1.0 + np.power(ah_s, self.n[i]), -self.m[i])   # S_e^*
+                se_s = np.power(1.0 + np.power(ah_s, self.n[i]), -self.m[i])
                 ah = np.abs(self.a[i] * h)
-                se_star = np.power(1.0 + np.power(ah, self.n[i]), -self.m[i])  # S_e
+                se_star = np.power(1.0 + np.power(ah, self.n[i]), -self.m[i])
                 term_num = (se_star ** self.L[i]) * (1.0 - (1.0 - se_star ** (1.0 / self.m[i])) ** self.m[i]) ** 2
                 term_den = (se_s ** self.L[i]) * (1.0 - (1.0 - se_s ** (1.0 / self.m[i])) ** self.m[i]) ** 2
                 return self.ks[i] * (term_num / term_den)
@@ -137,12 +137,9 @@ class SoilModels:
             if h >= hs:
                 return 10**-3# Prevents division-by-zero singularities in the matrix
             else:
-                # 1. Get Se at air entry to find fictitious thm
                 ah_s = np.abs(self.a[i] * hs)
                 se_s = np.power(1.0 + np.power(ah_s, self.n[i]), -self.m[i])
                 thm = self.tr[i] + (self.ths[i] - self.tr[i]) / se_s
-                
-                # 2. Calculate capacity using thm instead of ths
                 ah = self.a[i] * np.abs(h)
                 numerator = self.a[i] * self.m[i] * self.n[i] * (thm - self.tr[i]) * (ah**(self.n[i] - 1.0))
                 denominator = (1.0 + ah**self.n[i])**(self.m[i] + 1.0)
@@ -177,7 +174,7 @@ class SoilModels:
     
     def calculate_darcy(self,dz,h):
         n = h.shape[0]
-        k = (self.hydraulic_conductivity(h[n-1],n-1) + self.hydraulic_conductivity(h[n-2],n-2)) / 2 # averaged. constant dz
+        k = (self.hydraulic_conductivity(h[n-1],n-1) + self.hydraulic_conductivity(h[n-2],n-2)) / 2
         return - k * ((h[n-1]-h[n-2])/dz + 1)
     
     def calculate_pond(self,h,pond_old,dt,dz_top,flux_top,pond_max):
