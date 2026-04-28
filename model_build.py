@@ -28,7 +28,7 @@ class InfiltrationModel:
                 z_list.append(z)    
         return np.array(z_list),len(z_list) 
     
-    def set_run_solver(self,hini,flux_top,flux_bot,head_top,head_bot,trans):
+    def set_run_solver(self,hini,flux_top,flux_bot,head_top,head_bot,trans,time_interval=1):
         if self.top_opts[self.top_bound] in [2,3,4]:
             if (self.check != flux_top.shape[0]) or (self.check != trans.shape[0]):
                 raise ValueError(f'Simulation time and size of vectors should have to consistent for boundary {self.top_bound}')
@@ -36,7 +36,7 @@ class InfiltrationModel:
         self.validate_components()
         solver = NumericSolver(self.numba_soil,self.numba_tridia,self.numba_root,self.sim_time,self.temp_time,hini,flux_top,flux_bot,
                                head_top,head_bot,trans)
-        return solver.RunSolver()
+        return solver.RunSolver(time_interval)
         
     def set_soil_model(self,hydraulic_model,soil_data,test=False) -> None:
         options = {'BC':0,"VGM":1,'FXW':2,'FXW-M1':3,'VGM-AE':4}
@@ -127,6 +127,7 @@ class InfiltrationModel:
                     
                 elif self.root_dist == "uniform":
                     bx[i] = 1.0 / self.rzl
+        bx[-1] = 0 # neglect the root depth in the top cell. no sink source from it.
         return bx
 
 

@@ -25,7 +25,7 @@ class NumericSolver:
         self.ini_head = np.zeros(ini_head.shape)
         self.ini_head[:] = ini_head[:]
         self.transp = transp
-        self.dt_min, self.dt_max,self.dt,self.dt_new = 1 / 60,144.0,1.5,1.5
+        self.dt_min, self.dt_max,self.dt,self.dt_new = 1 / 60,self.sim_temp,1.5,1.5
         self.stat = 1
         self.flux_top,self.flux_bot = flux_top,flux_bot
         self.head_top,self.head_bot = head_top,head_bot
@@ -94,21 +94,31 @@ class NumericSolver:
         self.dt_new = self.control_dt(self.dt, i)
         return hx
     
-    def RunSolver(self):
-        count_time, ind_time,index,pond= 0.0,0.0,int(0),0
+    def RunSolver(self, time_interval=1):
+        count_time, ind_time, index, pond = 0.0, 0.0, int(0), 0
         dz_top = self.diagonal_model.dz_top
-        r,c = self.flux_top.shape[0],self.ini_head.shape[0]
-        hout,sout,sink_out,vroot = np.zeros((r+1,c)), np.zeros((r+1,c)),np.zeros((r+1,c)), 0 
-        hout[0,:] = self.ini_head[:]
-        sout[0,:] = self.soil_model.only_moisture(self.ini_head)[:]
-        self.root_model.calculate_sink_source(self.ini_head,self.transp[index])  
-        sink_out[0,:] = self.root_model.sink
-        while (count_time<self.sim_time):
+        r, c = self.flux_top.shape[0], self.ini_head.shape[0]
+        
+        # 1. Shrink the arrays to save memory immediately
+        out_rows = (r // time_interval) + 1
+        hout, sout, sink_out = np.zeros((out_rows, c)), np.zeros((out_rows, c)), np.zeros((out_rows, c))
+        
+        out_idx = 0  # Separate tracker for our smaller output array
+        
+        # Save initial state
+        hout[out_idx, :] = self.ini_head[:]
+        sout[out_idx, :] = self.soil_model.only_moisture(self.ini_head)[:]
+        self.root_model.calculate_sink_source(self.ini_head, self.transp[index])  
+        sink_out[out_idx, :] = self.root_model.sink
+        
+        out_idx += 1
+
+        while (count_time < self.sim_time):
             save_time = self.sim_temp - ind_time
             if self.dt > save_time:
                 self.dt = save_time
            
-            hnew = self.IterateTime(index,pond)
+            hnew = self.IterateTime(index, pond)
             if self.stat != 0:
                 self.dt = self.dt / 3
                 if self.dt < self.dt_min:
@@ -116,7 +126,7 @@ class NumericSolver:
 
             else:
                 if hnew[self.n1] >= 0: 
-                    pond = self.soil_model.calculate_pond(hnew,pond,self.dt,dz_top,self.flux_top[index],self.hs)
+                    pond = self.soil_model.calculate_pond(hnew, pond, self.dt, dz_top, self.flux_top[index], self.hs)
                 else:
                     pond = 0
                 
@@ -124,11 +134,17 @@ class NumericSolver:
                 ind_time += self.dt
                 self.dt = self.dt_new 
                 self.ini_head[:] = hnew[:]  
+                
                 if ind_time >= self.sim_temp:
-                    hout[index+1,:] = self.ini_head[:]
-                    sout[index+1,:] = self.soil_model.only_moisture(self.ini_head)
-                    self.root_model.calculate_sink_source(self.ini_head,self.transp[index])  
-                    sink_out[index+1,:] = self.root_model.sink
+                    # 2. Only save to the array if we hit the requested interval
+                    if (index + 1) % time_interval == 0:
+                        hout[out_idx, :] = self.ini_head[:]
+                        sout[out_idx, :] = self.soil_model.only_moisture(self.ini_head)
+                        self.root_model.calculate_sink_source(self.ini_head, self.transp[index])  
+                        sink_out[out_idx, :] = self.root_model.sink
+                        out_idx += 1
+
                     ind_time = ind_time - self.sim_temp
-                    index +=1
-        return hout,sout,sink_out
+                    index += 1
+                    
+        return hout, sout, sink_out

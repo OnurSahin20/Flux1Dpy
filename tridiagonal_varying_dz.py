@@ -100,12 +100,8 @@ class CreateTriDiagonal:
             dz_low = self.z[i] - self.z[i - 1]
             dz_up = self.z[i + 1] - self.z[i]
             dz_cell = (dz_up + dz_low) / 2.0
-            if atmosp == 1:
-                k1 = (self.k[i] + self.k[i - 1]) / 2.0
-                k2 = (self.k[i] + self.k[i + 1]) / 2.0
-            else:
-                k1 = np.sqrt(self.k[i] * self.k[i - 1])
-                k2 = np.sqrt(self.k[i] * self.k[i +1])
+            k1 = (self.k[i] + self.k[i - 1]) / 2.0
+            k2 = (self.k[i] + self.k[i + 1]) / 2.0
             self.A[i - 1] = -k1 / (dz_cell * dz_low)
             self.C[i] = -k2 / (dz_cell * dz_up)
             self.B[i] = (k1 / (dz_cell * dz_low)) + (k2 / (dz_cell * dz_up)) + (self.cap[i] / dt)

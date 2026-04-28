@@ -117,7 +117,7 @@ class SoilModels:
 
         elif self.method == 1:
             if h >= 0.0:
-                return 0
+                return 10**-3# Prevents division-by-zero singularities in the matrix
             ah = self.a[i] * np.abs(h)
             numerator = self.a[i] * self.m[i] * self.n[i] * (self.ths[i] - self.tr[i]) * (ah**(self.n[i] - 1.0))
             denominator = (1.0 + ah**self.n[i])**(self.m[i] + 1.0)
