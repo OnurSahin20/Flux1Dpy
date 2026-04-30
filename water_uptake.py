@@ -5,7 +5,7 @@ def feddes_model(p0, p0opt, p2h, p2l, p3, r2h, r2l, bx):
     @njit(fastmath=True, cache=True)
     def simulator(h, tp):
         size = h.shape[0]
-        sink = np.empty(size, dtype=bx.dtype)
+        sink = np.zeros(size, dtype=bx.dtype)
         
         if tp >= r2h:
             p2 = p2h

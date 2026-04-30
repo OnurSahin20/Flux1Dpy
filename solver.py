@@ -87,6 +87,7 @@ class NumericSolver:
             i += 1            
             err_sm, err_h = self.soil_model.get_errors(self.hnew, hx)
             self.hnew[:] = hx[:] 
+        
             if (err_sm <= eps_sm) and (err_h <= eps_h):
                  self.stat = 0
                  break
@@ -134,7 +135,7 @@ class NumericSolver:
                 ind_time += self.dt
                 self.dt = self.dt_new 
                 self.ini_head[:] = hnew[:]  
-                
+                print(count_time,self.ini_head[-1])
                 if ind_time >= self.sim_temp:
                     # 2. Only save to the array if we hit the requested interval
                     if (index + 1) % time_interval == 0:

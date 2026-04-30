@@ -1,14 +1,166 @@
 from numba import njit
 import numpy as np
 
+@njit(cache=True,fastmath=True)
+def calculate_error(h1, s1, h2, s2):
+    theta_err_max = 0.0
+    head_err_max = 0.0
+    size = h1.shape[0]
+    for i in range(size):
+        theta_err = np.abs(s1[i] - s2[i])
+        if theta_err > theta_err_max:
+            theta_err_max = theta_err
+            
+        head_err = np.abs(h1[i] - h2[i])
+        if head_err > head_err_max:
+            head_err_max = head_err     
+            
+    return theta_err_max, head_err_max
 
-def Numeric_Solver(diagonal,soil_model,root_model,sim_time,temp_time,initial,flux_top,transp,pond_max):
-    dt_min = 1/60 # 1 second
-    dt_max = temp_time # it can not exceed the temp time 
-    dt = 30 # starts from 30 minute !!
-    ha = -50_000 # minimum allowed pressure
-    hs = pond_max # maximum allowed pressure
-    eps_sm = 0.001 # iteration criteria moisture
-    eps_h = 1 # iteration criteria pressure head
-    @njit(fastmath=True, cache=True)
-    def IterateTime(index,pond,hold):
+@njit(cache=True,fastmath=True)
+def calculate_darcy(h, k, ztop):
+    k_mid = (k[-1] + k[-2]) / 2.0
+    return -k_mid * ((h[-1] - h[-2]) / ztop + 1.0) 
+
+@njit(cache=True,fastmath=True)
+def calculate_pond(qdarcy, pond_old, dt, flux_top, pond_max):
+    pond_new = pond_old + (-flux_top + qdarcy) * dt
+    if pond_new >= pond_max:
+        return pond_max
+    if pond_new < 0.0:
+        return 0.0
+    return pond_new
+
+def Numeric_Solver(diagonal_solver, soil_model, z, sim_time, temp_time, initial, flux_top, transp, pond_max):
+    dt_min = 1.0 / 60.0  # 1 second
+    dt_max = temp_time 
+    dt_ini = 1.5      # Initial dt
+    ha = -50_000.0       # Minimum allowed pressure (evaporation limit)
+    hs = pond_max        # Maximum allowed pressure
+    eps_sm = 0.001 
+    eps_h = 1 
+    max_iter = 10
+    dz_top = np.abs(z[-1] - z[-2])
+    
+    @njit(cache=True,fastmath=True)
+    def IterateTime(dt, pond, hold, current_flux, current_tp):
+        success = 1  # 0 = success, 1 = failure
+        s_old, k_old, cap_old = soil_model(hold) 
+        hnew= np.empty(hold.shape, dtype=hold.dtype)
+        hnew[:] = hold[:]
+        
+        if pond > 0.0:
+            neumann = 0 
+            dirichlet = 1  
+            hnew[-1] = pond
+        else:
+            neumann = 1
+            dirichlet = 0
+            
+        i = 0
+        
+        while i < max_iter:
+         
+            hx= diagonal_solver(dt, s_old, hnew, current_flux, current_tp, neumann)
+            
+            # Boundary Switching Logic
+            if dirichlet == 0:
+                if ha < hx[-1] < 0.0:          
+                    neumann = 1
+
+                else:
+                    neumann = 0
+                    dirichlet = 1
+                    hnew[:] = hold[:]
+                    if hx[-1] >= 0.0:
+                        hnew[-1] = 0.0
+                    else:
+                        hnew[-1] = ha
+                        
+                    i = 0 
+                    continue
+            else:
+                if hx[-1] >= 0:
+                    hnew[-1] = pond 
+                else:
+                    hnew[-1] = ha
+                
+            i += 1   
+            s1, k1, c1 = soil_model(hnew)
+            s2, k2, c2 = soil_model(hx)        
+            err_sm, err_h = calculate_error(hnew, s1, hx, s2)
+            if neumann ==1:
+                hnew[:] = hx[:] 
+            if (err_sm <= eps_sm) and (err_h <= eps_h):
+                 success = 0 # Converged
+                 break
+        
+        # Adaptive Time Stepping Logic
+        if i <= 3:
+            new_dt = min(dt * 1.3, dt_max)
+        elif i > 7:
+            new_dt = max(dt * 0.8, dt_min)
+        else:
+            new_dt = dt
+        return success, new_dt, hx, s2, k2
+    
+    @njit(cache=True,fastmath=True)
+    def RunSolver(time_interval=1):
+        count_time = 0.0
+        ind_time = 0.0
+        index = 0
+        pond = 0.0
+        current_dt = dt_ini 
+        ini_head = np.zeros(initial.shape, dtype=initial.dtype)
+        ini_head[:] = initial[:]
+        r, c = flux_top.shape[0], initial.shape[0]
+        out_rows = (r // time_interval)
+        
+        hout = np.zeros((out_rows, c))
+        sout = np.zeros((out_rows, c))
+        #sink_out = np.zeros((out_rows, c))
+        out_idx = 0
+        
+        while count_time < sim_time:
+            save_time = temp_time - ind_time
+            
+            if current_dt > save_time:
+                current_dt = save_time
+           
+            success, new_dt, hx, s2, k2 = IterateTime(current_dt, pond, ini_head, flux_top[index], transp[index])
+            
+            if success != 0: # Failure
+                current_dt = current_dt / 3.0
+                if current_dt < dt_min:
+                    raise ValueError("Solver failed to converge. dt dropped below dt_min")
+
+            else: # Success
+                if hx[-1] >= 0.0: 
+                    qdarcy = calculate_darcy(hx, k2, dz_top)
+                    pond = calculate_pond(qdarcy, pond, current_dt, flux_top[index], hs)
+                else:
+                    pond = 0.0
+                
+                count_time += current_dt
+                ind_time += current_dt
+                current_dt = new_dt 
+                ini_head[:] = hx[:] 
+             
+                # Output Saving
+                if ind_time >= temp_time:
+                    if (index + 1) % time_interval == 0:
+                        hout[out_idx, :] = ini_head[:]
+                        sout[out_idx, :] = s2[:]
+                        #sink_out[out_idx, :] = sink[:]
+                        out_idx += 1
+
+                    ind_time = ind_time - temp_time
+                    index += 1
+                    
+        return hout, sout #sink_out
+        
+    return RunSolver
+        
+        
+
+
