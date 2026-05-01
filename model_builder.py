@@ -1,17 +1,18 @@
 import numpy as np
-import soil_model_new
 import water_uptake
 import create_tridiagonal
-import new_solver
+import solver
+import soil_model
 
 class InfiltrationModel:
     def __init__(self, sim_time: int, temp_time:int,discrete: dict[str:np.ndarray, str:float],precision=np.float32) -> None:
+        self.precision = precision
         self.sim_time, self.temp_time = sim_time,temp_time
         self.discrete = discrete
         self.z,self.nodes = self.set_grid()
         self.numba_soil,self.numba_root, self.numba_tridia = None, None, None
         self.check  = int(self.sim_time / self.temp_time)
-        self.precision = precision
+       
         self.soil_params = {}
         self.hydro_model = None
         
@@ -27,7 +28,7 @@ class InfiltrationModel:
             for _ in range(num_cells):
                 z += dz
                 z_list.append(z)    
-        return np.array(z_list),len(z_list)  
+        return np.array(z_list,dtype=self.precision),len(z_list)  
     
     def set_run_solver(self,hini,flux_top,trans,pond_max,time_interval=1):
    
@@ -37,9 +38,9 @@ class InfiltrationModel:
         trans = trans.astype(self.precision)
         hini = hini.astype(self.precision)
         self.validate_components()
-        solver = new_solver.Numeric_Solver(self.numba_tridia,self.numba_soil,self.z,self.sim_time,self.temp_time,
+        solv = solver.Numeric_Solver(self.numba_tridia,self.numba_soil,self.numba_root,self.z,self.sim_time,self.temp_time,
                                            hini,flux_top,trans,pond_max)
-        return solver(time_interval)
+        return solv(time_interval)
         
     def set_soil_model(self,hydraulic_model,soil_data,test=False) -> None:
         self.hydro_model = hydraulic_model
@@ -57,18 +58,18 @@ class InfiltrationModel:
         
         for param in soil_data.keys():
             if test:
-                self.soil_params[param] =np.array([soil_data[param][0]]*self.z.shape[0]).astype(self.precision)# HYDRUS Profile information for validation
+                self.soil_params[param] = np.full(self.nodes, soil_data[param][0], dtype=self.precision)# HYDRUS Profile information for validation
             else:
                 self.soil_params[param] =  self.create_vertical_profile(soil_data[param])
        
         if options[self.hydro_model] == 0:
-            self.numba_soil= soil_model_new.bc_model(self.soil_params['hb'],self.soil_params['ths'],self.soil_params['tr'],self.soil_params['lamb'],self.soil_params['ks'])
+            self.numba_soil= soil_model.bc_model(self.soil_params['hb'],self.soil_params['ths'],self.soil_params['tr'],self.soil_params['lamb'],self.soil_params['ks'])
         
         elif options[self.hydro_model] == 1:
-            self.numba_soil = soil_model_new.vgm_model(self.soil_params['tr'],self.soil_params['ths'],self.soil_params['ks'],
+            self.numba_soil = soil_model.vgm_model(self.soil_params['tr'],self.soil_params['ths'],self.soil_params['ks'],
                                             self.soil_params['a'],self.soil_params['n'],self.soil_params['m'],self.soil_params['L'])
         else:
-            self.numba_soil = soil_model_new.vgm_ae_model(self.soil_params['tr'],self.soil_params['ths'],self.soil_params['ks'],
+            self.numba_soil = soil_model.vgm_ae_model(self.soil_params['tr'],self.soil_params['ths'],self.soil_params['ks'],
                                             self.soil_params['a'],self.soil_params['n'],self.soil_params['m'],self.soil_params['L'])
 
 
@@ -125,8 +126,8 @@ class InfiltrationModel:
                     
                 elif root_distribution == "uniform":
                     bx[i] = 1.0 / root_depth
-        bx[-1] = 0 # neglect the root depth in the top cell. no sink source from it.
-        bx[0] = 0 # also fron the boundary bot
+        bx[-1] = 0.0 # neglect the root depth in the top cell. no sink source from it.
+        bx[0] = 0.0 # also fron the boundary bot
         return bx
 
 

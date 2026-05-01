@@ -31,10 +31,10 @@ def calculate_pond(qdarcy, pond_old, dt, flux_top, pond_max):
         return 0.0
     return pond_new
 
-def Numeric_Solver(diagonal_solver, soil_model, z, sim_time, temp_time, initial, flux_top, transp, pond_max):
+def Numeric_Solver(diagonal_solver, soil_model,root_model, z, sim_time, temp_time, initial, flux_top, transp, pond_max):
     dt_min = 0.1 # 6 second
     dt_max = temp_time 
-    dt_ini = 2     # Initial dt
+    dt_ini = temp_time/10   # Initial dt
     ha = -50_000.0       # Minimum allowed pressure (evaporation limit)
     hs = pond_max        # Maximum allowed pressure
     eps_sm = 0.001 
@@ -118,12 +118,17 @@ def Numeric_Solver(diagonal_solver, soil_model, z, sim_time, temp_time, initial,
         ini_head = np.empty(initial.shape,initial.dtype)
         ini_head[:] = initial[:]
         r, c = flux_top.shape[0], initial.shape[0]
-        out_rows = (r // time_interval)
+        out_rows = (r // time_interval) + 1
         hout = np.empty((out_rows, c),initial.dtype)
         sout = np.empty((out_rows, c),initial.dtype)
-        #sink_out = np.zeros((out_rows, c))
+        sink_out = np.zeros((out_rows, c))
         out_idx = 0
-        
+        # Save initial state
+        hout[out_idx, :] = ini_head[:]
+        s,k,c =  soil_model(ini_head,sm=True)
+        sout[out_idx, :] = s[:]
+        out_idx += 1
+
         while count_time < sim_time:
             save_time = temp_time - ind_time
             
@@ -154,13 +159,14 @@ def Numeric_Solver(diagonal_solver, soil_model, z, sim_time, temp_time, initial,
                     if (index + 1) % time_interval == 0:
                         hout[out_idx, :] = ini_head[:]
                         sout[out_idx, :] = s[:]
-                        #sink_out[out_idx, :] = sink[:]
+                        sink = root_model(ini_head[:],transp[index])
+                        sink_out[out_idx, :] = sink[:]
                         out_idx += 1
 
                     ind_time = ind_time - temp_time
                     index += 1
          
-        return hout, sout #sink_out
+        return hout, sout, sink_out
         
     return RunSolver
         
