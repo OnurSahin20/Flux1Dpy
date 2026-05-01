@@ -22,6 +22,18 @@ Flux1Dpy includes 5 different soil hydraulic property models, from standard to s
 Check jupyter notebook examples from the test folder! ./test/txson_network/field_example.ipynb example has real case data > using meteorological data precipitation, evaporation, transpiration > pedotransfer function derived soil parameters > 1d unsturated zone setting with both custom model and HYDRUS and differences of the models. 5 year simulation more than 40,000 hourly time step real case example.
 
 ## 📈 Developing
-Current benchmarks show the model is 3x to 5x slower than HYDRUS. Implementing lookup tables for soil hydraulic properties—a feature currently in development—will significantly reduce execution time.
+Current benchmarks show the model is 3x to 5x slower than HYDRUS. Implementing lookup tables for soil hydraulic properties—a feature currently in development—will significantly reduce execution time. They don't calculate costly non-linear expressions K(h), $\theta$(h) use pre-calculated points and linear interpolation which is the model extremely fast, custom model will be there soon!!
 
+The primary objective of this project is the development of a computationally efficient, quasi-3D integrated modeling framework designed to simulate complex interactions between subsurface, overland, and channel flow environments.
 
+The project is structured into several key development phases:
+
+Subsurface Foundation: Implementation of a high-performance 1D Richards equation solver (Flux1Dpy) to manage vertical unsaturated zone dynamics.
+
+Adaptive Spatial Discretization: Utilizing an adaptive finite volume approach to discretize watersheds into irregular polygons, allowing for flexible resolution across varying terrains.
+
+Quasi-3D Coupling: Integrating vertical 1D columns with a "cheap" lateral flow scheme between polygons to represent three-dimensional subsurface movement without the overhead of a full 3D mesh.
+
+Surface Interaction: Coupling the subsurface framework with overland flow dynamics to capture infiltration-excess and saturation-excess runoff.
+
+Integrated Routing: Development and integration of a 1D channel flow model to route water through the stream network, completing the water balance from hillslope to outlet.
