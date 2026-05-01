@@ -19,7 +19,7 @@ Flux1Dpy includes 5 different soil hydraulic property models, from standard to s
 3. **Air-Entry Van Genuchten-VGM-AE**
 
 ## 📈 Quick Example
-Check jupyter notebook examples from the test folder!
+Check jupyter notebook examples from the test folder! ./test/txson_network/field_example.ipynb example has real case data > using meteorological data precipitation, evaporation, transpiration > pedotransfer function derived soil parameters > 1d unsturated zone setting with both custom model and HYDRUS and differences of the models. 5 year simulation more than 40,000 hourly time step real case example.
 
 ## 📈 Developing
 Current benchmarks show the model is 3x to 5x slower than HYDRUS. Implementing lookup tables for soil hydraulic properties—a feature currently in development—will significantly reduce execution time.
