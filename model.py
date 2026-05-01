@@ -14,6 +14,7 @@ class InfiltrationModel:
         self.precision = precision
         self.soil_params = {}
         self.hydro_model = None
+        
     def validate_components(self):
         for attr in ['numba_soil', 'numba_root', 'numba_tridia']:
             if getattr(self, attr) is None:
@@ -32,7 +33,9 @@ class InfiltrationModel:
    
         if (self.check != flux_top.shape[0]) or (self.check != trans.shape[0]):
             raise ValueError(f'Simulation time and size of vectors should have to consistent for boundary {self.top_bound}')
-
+        flux_top = flux_top.astype(self.precision)
+        trans = trans.astype(self.precision)
+        hini = hini.astype(self.precision)
         self.validate_components()
         solver = new_solver.Numeric_Solver(self.numba_tridia,self.numba_soil,self.z,self.sim_time,self.temp_time,
                                            hini,flux_top,trans,pond_max)
@@ -121,7 +124,7 @@ class InfiltrationModel:
                     bx[i] = bx_intensity * local_dz
                     
                 elif root_distribution == "uniform":
-                    bx[i] = 1.0 / self.rzl
+                    bx[i] = 1.0 / root_depth
         bx[-1] = 0 # neglect the root depth in the top cell. no sink source from it.
         bx[0] = 0 # also fron the boundary bot
         return bx

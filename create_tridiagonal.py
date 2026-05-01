@@ -2,23 +2,22 @@ from numba import njit
 import numpy as np
 
 def Tridiagonal(soil_model, root_model, bot_bound, z,precision):
+    size = z.shape[0]
+    n_1, n_2 = size - 1, size - 2
     @njit(cache=True,fastmath=True)
     def update_solution(dt, s1, h2, flux_top, tp, neumann):
-      
-        size = z.shape[0]
-        n_1, n_2 = size - 1, size - 2
-        A = np.zeros(size - 1, dtype=precision)
-        B = np.zeros(size, dtype=precision)
-        C = np.zeros(size - 1, dtype=precision)
-        F = np.zeros(size, dtype=precision)
+        A = np.empty(size - 1, dtype=precision)
+        B = np.empty(size, dtype=precision)
+        C = np.empty(size - 1, dtype=precision)
+        F = np.empty(size, dtype=precision)
         
-        alfa = np.zeros(size, dtype=precision)
-        beta = np.zeros(size, dtype=precision)
-        y = np.zeros(size, dtype=precision)
-        h_new = np.zeros(size, dtype=precision)
+        alfa = np.empty(size, dtype=precision)
+        beta = np.empty(size, dtype=precision)
+        y = np.empty(size, dtype=precision)
+        h_new = np.empty(size, dtype=precision)
         sink = root_model(h2, tp)
         
-        s2, k, cap = soil_model(h2)
+        s2, k, cap = soil_model(h2,False)
         # Bottom Boundary 
         if bot_bound == 0:  # Free drainage (unit gradient)
             B[0], C[0], F[0] = 1.0, -1.0, h2[1] - h2[0]

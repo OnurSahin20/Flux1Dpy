@@ -41,7 +41,7 @@ def sshape_model(p0, p50, bx):
     @njit(fastmath=True, cache=True)
     def simulator(h, tp):
         size = h.shape[0]
-        sink = np.empty(size, dtype=bx.dtype) 
+        sink = np.zeros(size, dtype=bx.dtype) 
         for i in range(size):
             if h[i] >= 0.0:
                 sink[i] = 0.0
