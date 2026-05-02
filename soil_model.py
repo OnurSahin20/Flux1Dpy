@@ -10,7 +10,7 @@ def vgm_model(tr, ths, ks, a, n, m, L):
             if h[i] >= 0.0:
                 theta[i] = ths[i]
                 conduct[i] = ks[i]
-                cap[i] = 0
+                cap[i] = 1e-6
             else:
                 ah = np.abs(a[i] * h[i])
                 ah_n = ah ** n[i]
@@ -24,7 +24,7 @@ def vgm_model(tr, ths, ks, a, n, m, L):
                 if h[i] >= 0.0:
                     theta[i] = ths[i]
                     conduct[i] = ks[i]
-                    cap[i] = 0
+                    cap[i] = 1e-6
                 else:
                     ah = np.abs(a[i] * h[i])
                     ah_n = ah ** n[i]
@@ -65,7 +65,7 @@ def vgm_ae_model(tr, ths, ks, a, n, m, L):
                 if h[i] >= hs:
                     theta[i] = ths[i]
                     conduct[i] = ks[i]
-                    cap[i] = 1e-3
+                    cap[i] = 1e-6
                 else:
                     # Only calculate the dynamic h-dependent terms inside the loop
                     ah = np.abs(a[i] * h[i])
@@ -81,7 +81,7 @@ def vgm_ae_model(tr, ths, ks, a, n, m, L):
                 if h[i] >= hs:
                     theta[i] = ths[i]
                     conduct[i] = ks[i]
-                    cap[i] = 1e-3
+                    cap[i] = 1e-6
                 else:
                     # Only calculate the dynamic h-dependent terms inside the loop
                     ah = np.abs(a[i] * h[i])
