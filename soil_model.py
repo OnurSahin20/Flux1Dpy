@@ -7,16 +7,17 @@ def vgm_model(tr, ths, ks, a, n, m, L):
         size = h.shape[0]
         theta,conduct,cap = np.empty(size, dtype=tr.dtype), np.empty(size, dtype=tr.dtype),np.empty(size, dtype=tr.dtype)
         if sm:
-            if h[i] >= 0.0:
-                theta[i] = ths[i]
-                conduct[i] = ks[i]
-                cap[i] = 1e-6
-            else:
-                ah = np.abs(a[i] * h[i])
-                ah_n = ah ** n[i]
-                base = 1.0 + ah_n
-                se = base ** -m[i]
-                theta[i] = tr[i] + (ths[i] - tr[i]) * se
+            for i in range(size):
+                if h[i] >= 0.0:
+                    theta[i] = ths[i]
+                    conduct[i] = ks[i]
+                    cap[i] = 1e-6
+                else:
+                    ah = np.abs(a[i] * h[i])
+                    ah_n = ah ** n[i]
+                    base = 1.0 + ah_n
+                    se = base ** -m[i]
+                    theta[i] = tr[i] + (ths[i] - tr[i]) * se
             
             return theta, conduct, cap
         else:

@@ -5,7 +5,7 @@ MaxAL (MaxAL = number of atmospheric data-records)
 lDailyVar lSinusVar lLai lBCCycles lInterc 
 f f f f f
 hCritS (max. allowed pressure head at the soil surface)
-0
+3
  tAtm  Prec  rSoil  rRoot  hCritA  rB  hB  ht  tTop  tBot  Ampl  cTop  cBot
     3     2    0.1    0.5   50000   0   0   0     0     0     0   0.0   0.0
    30     0    0.1    1.5   50000   0   0   0     0     0     0   0.0   0.0

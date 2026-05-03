@@ -20,7 +20,7 @@ t f -1 f
 BotInf  qGWLF  FreeD  SeepF  KodBot  qDrain  hSeep  
 f f f f 1 f 0 
 ha  hb  
-0 0 
+1e-06 10000.0 
 iModel  iHyst  
 3 0 
   thr  ths  Alfa    n  Ks   l

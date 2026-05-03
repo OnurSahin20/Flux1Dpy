@@ -12,7 +12,7 @@ class InfiltrationModel:
         self.z,self.nodes,self.mat_ids = self.set_grid()
         self.numba_soil,self.numba_root, self.numba_tridia = None, None, None
         self.check  = int(self.sim_time / self.temp_time)
-
+        self.bot_bound = None
         self.soil_params = {}
         self.hydro_model = None
         self.hmin = -1e5
@@ -43,7 +43,7 @@ class InfiltrationModel:
         hini = hini.astype(self.precision)
         self.validate_components()
         solv = solver.Numeric_Solver(self.numba_tridia,self.numba_soil,self.numba_root,self.z,self.sim_time,self.temp_time,
-                                           hini,flux_top,trans,pond_max,self.hmin)
+                                           hini,flux_top,trans,pond_max,self.hmin,)
         return solv(time_interval)
     
     def create_hgrid(self, h_min=-100000.0, h_trans=-1000.0, total_bins=2500, wet_fraction=0.8):
@@ -118,10 +118,11 @@ class InfiltrationModel:
     
     def set_boundary_conditions(self,bot_bound) -> None:
         bot_opts = {'free drainage':0,'groundwater level':1}
+        self.bot_bound = bot_opts[bot_bound]
         if self.numba_root is None:
             bx = np.zeros(self.nodes,self.precision)
             self.numba_root = water_uptake.sshape_model(3,-800,bx) # zero sink_source all the time
-        self.numba_tridia = create_tridiagonal.Tridiagonal(self.numba_soil,self.numba_root,bot_opts[bot_bound],self.z,self.precision)
+        self.numba_tridia = create_tridiagonal.Tridiagonal(self.numba_soil,self.numba_root,self.bot_bound,self.z,self.precision)
    
 
     def create_vertical_profile(self, x: list) -> np.ndarray:
