@@ -117,7 +117,7 @@ def bc_model(hb, ths, tr, lamb, ks):
             if h[i] >= hb[i]:
                 theta[i] = ths[i]
                 conduct[i] = ks[i]
-                cap[i] = 1e-3
+                cap[i] = 1e-6
             else:
                 ratio = hb[i] / h[i]
                 ratio_lamb = ratio ** lamb[i]
@@ -129,6 +129,88 @@ def bc_model(hb, ths, tr, lamb, ks):
         return theta, conduct, cap
     return simulator
 
+@njit(cache=True)
+def generate_lut_arrays(simulator, h_table):
+    """
+    Fast loop to populate LUT arrays, now including the analytical Capacity table.
+    """
+    num_materials = h_table.shape[0]
+    bins = h_table.shape[1]
+    
+    theta_table = np.empty((num_materials, bins), dtype=h_table.dtype)
+    K_table = np.empty((num_materials, bins), dtype=h_table.dtype)
+    
+    
+    for j in range(bins):
+        h_slice = np.ascontiguousarray(h_table[:, j])
+        
+        # Capture theta, K, AND the analytical capacity (cap)
+        th, k, cap = simulator(h_slice, False) 
+        
+        theta_table[:, j] = th
+        K_table[:, j] = k
+        
+    return theta_table, K_table
 
+
+def lut_model(h_table, theta_table, K_table,mat_ids):
+    
+    nodes = len(mat_ids)
+    bins = h_table.shape[1]
+
+    @njit(cache=True, fastmath=True)
+    def simulator(h, sm=False):
+        theta = np.empty(nodes, dtype=h_table.dtype)
+        conduct = np.empty(nodes, dtype=h_table.dtype)
+        cap = np.empty(nodes, dtype=h_table.dtype)
+        
+        for i in range(nodes):
+            m = mat_ids[i]  # Fetch the specific material ID for this node
+            h_val = h[i]
+            
+            # Find index in monotonically increasing h_table for this material
+            idx = np.searchsorted(h_table[m], h_val)
+            
+            if idx == 0:
+                h0, h1 = h_table[m, 0], h_table[m, 1]
+                t0, t1 = theta_table[m, 0], theta_table[m, 1]
+                
+                # Calculate the exact chord slope of the final bin
+                slope = (t1 - t0) / (h1 - h0)
+                
+                # Linearly extrapolate theta beyond the table limit
+                theta[i] = t0 + slope * (h_val - h0)
+                
+                # Capacity is perfectly tied to the extrapolated theta
+                cap[i] = slope
+                if not sm: conduct[i] = K_table[m, 0]
+               
+                
+            elif idx == bins:
+                # Saturated / Ponding conditions (h >= 0.0)
+                theta[i] = theta_table[m, -1]
+                if not sm: conduct[i] = K_table[m, -1]
+                cap[i] = 1e-6
+                
+            else:
+                # Linear Interpolation
+                h0, h1 = h_table[m, idx-1], h_table[m, idx]
+                t0, t1 = theta_table[m, idx-1], theta_table[m, idx]
+                
+                weight = (h_val - h0) / (h1 - h0)
+                theta[i] = t0 + weight * (t1 - t0)
+                
+                # Static Capacity C(h) using the chord slope for solver fallback
+                cap[i] = (t1 - t0) / (h1 - h0) 
+                
+                if not sm:
+                    k0, k1 = K_table[m, idx-1], K_table[m, idx]
+                    conduct[i] = k0 + weight * (k1 - k0)
+                else:
+                    conduct[i] = 0.0 
+                    
+        return theta, conduct, cap
+        
+    return simulator
        
         

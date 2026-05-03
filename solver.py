@@ -31,11 +31,11 @@ def calculate_pond(qdarcy, pond_old, dt, flux_top, pond_max):
         return 0.0
     return pond_new
 
-def Numeric_Solver(diagonal_solver, soil_model,root_model, z, sim_time, temp_time, initial, flux_top, transp, pond_max):
+def Numeric_Solver(diagonal_solver, soil_model,root_model, z, sim_time, temp_time, initial, flux_top, transp, pond_max,hmin):
     dt_min = 0.1 # 6 second
     dt_max = temp_time 
     dt_ini = temp_time/10   # Initial dt
-    ha = -50_000.0       # Minimum allowed pressure (evaporation limit)
+    ha = hmin      # Minimum allowed pressure (evaporation limit)
     hs = pond_max        # Maximum allowed pressure
     eps_sm = 0.001 
     eps_h = 1 

@@ -9,26 +9,30 @@ class InfiltrationModel:
         self.precision = precision
         self.sim_time, self.temp_time = sim_time,temp_time
         self.discrete = discrete
-        self.z,self.nodes = self.set_grid()
+        self.z,self.nodes,self.mat_ids = self.set_grid()
         self.numba_soil,self.numba_root, self.numba_tridia = None, None, None
         self.check  = int(self.sim_time / self.temp_time)
-       
+
         self.soil_params = {}
         self.hydro_model = None
-        
+        self.hmin = -1e5
     def validate_components(self):
         for attr in ['numba_soil', 'numba_root', 'numba_tridia']:
             if getattr(self, attr) is None:
                 raise ValueError(f"{attr} is None")
             
     def set_grid(self):
-        z_list,z = [0.0], 0.0
+        z_list, z = [0.0], 0.0
+        mat_ids = [0] 
+        c = 0
         for layer_len, dz in zip(self.discrete["layers"], self.discrete["dz"]):
             num_cells = int(round(layer_len / dz)) 
             for _ in range(num_cells):
                 z += dz
-                z_list.append(z)    
-        return np.array(z_list,dtype=self.precision),len(z_list)  
+                z_list.append(z)
+                mat_ids.append(c)  # Assign the current material index to the node
+            c += 1
+        return np.array(z_list, dtype=self.precision), len(z_list), np.array(mat_ids, dtype=np.int32)
     
     def set_run_solver(self,hini,flux_top,trans,pond_max,time_interval=1):
    
@@ -39,12 +43,30 @@ class InfiltrationModel:
         hini = hini.astype(self.precision)
         self.validate_components()
         solv = solver.Numeric_Solver(self.numba_tridia,self.numba_soil,self.numba_root,self.z,self.sim_time,self.temp_time,
-                                           hini,flux_top,trans,pond_max)
+                                           hini,flux_top,trans,pond_max,self.hmin)
         return solv(time_interval)
+    
+    def create_hgrid(self, h_min=-100000.0, h_trans=-1000.0, total_bins=2500, wet_fraction=0.8):
+       
+        wet_bins = int(total_bins * wet_fraction)
+        dry_bins = total_bins - wet_bins
         
-    def set_soil_model(self,hydraulic_model,soil_data,test=False) -> None:
+        # 1. DRY ZONE: Logarithmic spacing from h_min to h_trans
+        # endpoint=False ensures we don't duplicate the h_trans point
+        dry_grid = -np.logspace(np.log10(-h_min), np.log10(-h_trans), dry_bins, endpoint=False)
+        
+        # 2. WET ZONE: Linear spacing from h_trans to exactly 0.0
+        wet_grid = np.linspace(h_trans, 0.0, wet_bins)
+        
+        # 3. Concatenate and enforce precision
+        smart_grid_1d = np.concatenate((dry_grid, wet_grid)).astype(self.precision)
+        
+        return smart_grid_1d    
+    def set_soil_model(self,hydraulic_model,soil_data,h_min=-1e5,use_lut=False,lut_bins=1e4,test=False) -> None:
         self.hydro_model = hydraulic_model
         options = {'BC':0,"VGM":1,'VGM-AE':2}
+        num_materials = len(soil_data['ths'])
+        self.hmin = h_min
         if (hydraulic_model== "VGM") or (hydraulic_model== "VGM-AE") :
             req_params = ["a","n","m","tr","ths","ks","L"]
         elif hydraulic_model == "BC":
@@ -58,10 +80,14 @@ class InfiltrationModel:
         
         for param in soil_data.keys():
             if test:
-                self.soil_params[param] = np.full(self.nodes, soil_data[param][0], dtype=self.precision)# HYDRUS Profile information for validation
+                use_lut = False
+                self.soil_params[param] = np.full(self.nodes, soil_data[param][0], dtype=self.precision)
             else:
                 self.soil_params[param] =  self.create_vertical_profile(soil_data[param])
-       
+        if use_lut:
+            raw_params = {p: np.array(soil_data[p][:num_materials], dtype=self.precision) for p in req_params}
+            self.soil_params = raw_params
+
         if options[self.hydro_model] == 0:
             self.numba_soil= soil_model.bc_model(self.soil_params['hb'],self.soil_params['ths'],self.soil_params['tr'],self.soil_params['lamb'],self.soil_params['ks'])
         
@@ -72,6 +98,12 @@ class InfiltrationModel:
             self.numba_soil = soil_model.vgm_ae_model(self.soil_params['tr'],self.soil_params['ths'],self.soil_params['ks'],
                                             self.soil_params['a'],self.soil_params['n'],self.soil_params['m'],self.soil_params['L'])
 
+        if use_lut:
+            h_grid_1d = -np.logspace(np.log10(-h_min), np.log10(1e-4), int(lut_bins) - 1,dtype=self.precision)
+            h_grid_1d = np.append(h_grid_1d, 0.0).astype(self.precision)
+            h_table = np.tile(h_grid_1d, (num_materials, 1))
+            theta_table, K_table = soil_model.generate_lut_arrays(self.numba_soil, h_table)
+            self.numba_soil = soil_model.lut_model(h_table, theta_table, K_table,self.mat_ids)
 
     def set_root_model(self,root_model = "",root_params={},
                        root_distribution="", root_depth = 0):
@@ -93,17 +125,7 @@ class InfiltrationModel:
    
 
     def create_vertical_profile(self, x: list) -> np.ndarray:
-        vertic_prof = np.zeros(self.nodes,dtype=self.precision)
-        c,count = 0,0.0    
-        for i in range(self.nodes):
-            vertic_prof[i] = x[c]
-            if i < self.nodes - 1:
-                current_dz = self.discrete["dz"][c]
-                count += current_dz
-                if c < len(x) - 1 and count >= self.discrete["layers"][c] - 1e-9:
-                    c += 1
-                    count = 0.0           
-        return vertic_prof
+        return np.array(x, dtype=self.precision)[self.mat_ids] # one line of code creates the vertical profile!
 
     def create_root_distribution(self,root_distribution,root_depth) -> np.ndarray:
         bx = np.zeros(self.z.shape[0], dtype=self.precision)
